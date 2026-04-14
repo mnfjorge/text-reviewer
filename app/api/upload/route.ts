@@ -13,7 +13,7 @@ const ALLOWED_CONTENT_TYPES = [
   'application/zip',
 ];
 
-export async function POST(request: NextRequest): Promise<Response> {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = (await request.json()) as HandleUploadBody;
 
   try {
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         // Nothing to do — parse route handles cleanup after processing
       },
     });
-    return jsonResponse;
+    return NextResponse.json(jsonResponse);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Upload token error';
     return NextResponse.json({ error: message }, { status: 400 });
