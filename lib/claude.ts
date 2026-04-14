@@ -30,14 +30,16 @@ const SYNTHESIS_SYSTEM_PROMPT = `You are an expert linguistic analyst. You have 
 
 Return a single JSON object with one field: **rulesMarkdown** — a complete Markdown document that will be pasted later as **instructions for another LLM** applying the same document pair’s conventions.
 
+**Language (mandatory):** Write the **entire** \`rulesMarkdown\` document in **Brazilian Portuguese (pt-BR)** — all titles, section headings, bullets, explanations, and meta text. Use natural wording for Brazil (você / imperativo, terminologia comum em revisão e localização). You may keep **short quoted excerpts** from the source/target documents in their **original language** when they illustrate a rule; everything you add around them must still be in pt-BR.
+
 Requirements for **rulesMarkdown**:
-- Start with a level-1 title naming the document pair and purpose (e.g. revision / localization rules).
+- Start with a level-1 title naming the document pair and purpose (e.g. regras de revisão / localização).
 - Use \`##\` sections for each major theme you infer from the insights.
 - Use **imperative**, testable bullets (what to do / what to avoid), not vague prose.
 - Where helpful, add short **sub-bullets** with concrete before→after or terminology guidance drawn from the insights.
 - Prefer depth over repetition; merge duplicate themes.
 - If any chunk had non-empty insights, the document must be **substantive** (not empty and not a single generic sentence).
-- If every chunk’s insights were empty, write a brief Markdown note that no rules could be inferred.`;
+- If every chunk’s insights were empty, write a brief Markdown note in pt-BR that no rules could be inferred.`;
 
 interface RawChunkResult {
   insights: Array<{ insight: string; basis?: string }>;
