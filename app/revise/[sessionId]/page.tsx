@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
-import { Badge } from '@/components/ui/Badge';
+import { MarkdownBody } from '@/components/MarkdownBody';
 import type { LearningSession } from '@/lib/types';
 
 type RevisionState = 'idle' | 'loading' | 'streaming' | 'done' | 'error';
@@ -153,75 +153,35 @@ export default function ReviseSessionPage() {
         </div>
       </div>
 
-      {/* Learned patterns (collapsible) */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setPatternsOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-gray-800 text-sm">
-              Learned patterns
-            </span>
-            <Badge
-              label={String(session.globalPatterns?.length ?? 0)}
-              color="indigo"
-            />
-            {session.rulesMarkdown?.trim() && (
-              <Badge label="MD rules" color="gray" />
-            )}
-          </div>
-          <svg
-            className={`h-4 w-4 text-gray-400 transition-transform ${patternsOpen ? 'rotate-180' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
+      {/* Learned rules (collapsible, rendered Markdown — same text used for revision) */}
+      {session.rulesMarkdown?.trim() && (
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setPatternsOpen((o) => !o)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+            <span className="font-medium text-gray-800 text-sm">
+              Learned rules (Markdown)
+            </span>
+            <svg
+              className={`h-4 w-4 text-gray-400 transition-transform ${patternsOpen ? 'rotate-180' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
 
-        {patternsOpen && (
-          <div className="border-t border-gray-100 divide-y divide-gray-50">
-            {session.rulesMarkdown?.trim() && (
-              <div className="px-5 py-4 bg-slate-50/80">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                  Markdown rules (used first for revision)
-                </p>
-                <pre className="text-xs text-slate-800 whitespace-pre-wrap break-words font-mono max-h-48 overflow-y-auto">
-                  {session.rulesMarkdown}
-                </pre>
-              </div>
-            )}
-            {(session.globalPatterns ?? []).map((p, i) => (
-              <div key={i} className="px-5 py-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-semibold text-indigo-700">
-                    {p.patternType}
-                  </span>
-                  <Badge label={`${p.exampleCount}×`} color="gray" />
-                </div>
-                <p className="text-xs text-gray-500 mb-2">{p.description}</p>
-                {p.examples.slice(0, 2).map((ex, j) => (
-                  <div
-                    key={j}
-                    className="mt-1 text-xs grid grid-cols-2 gap-2 font-mono"
-                  >
-                    <div className="bg-red-50 border border-red-100 rounded px-2 py-1 text-red-700 truncate">
-                      {ex.source}
-                    </div>
-                    <div className="bg-green-50 border border-green-100 rounded px-2 py-1 text-green-700 truncate">
-                      {ex.target}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+          {patternsOpen && (
+            <div className="border-t border-gray-100 px-5 py-4 max-h-[min(60vh,28rem)] overflow-y-auto bg-slate-50/50">
+              <MarkdownBody markdown={session.rulesMarkdown} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Input / Output */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

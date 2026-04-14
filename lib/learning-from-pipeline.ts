@@ -7,7 +7,7 @@ export function learningSessionFromPipeline(
   if (!state.pairs?.length || !state.analyses?.length) {
     return null;
   }
-  if (state.globalPatterns === undefined && state.rulesMarkdown === undefined) {
+  if (typeof state.rulesMarkdown !== 'string' || !state.rulesMarkdown.trim()) {
     return null;
   }
 
@@ -28,8 +28,7 @@ export function learningSessionFromPipeline(
     chunkCount: state.pairs.length,
     pairs: state.pairs,
     analyses: state.analyses,
-    globalPatterns: state.globalPatterns ?? [],
-    rulesMarkdown: state.rulesMarkdown ?? '',
+    rulesMarkdown: state.rulesMarkdown.trim(),
     blobUrl,
   };
 }

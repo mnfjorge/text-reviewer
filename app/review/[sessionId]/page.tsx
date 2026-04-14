@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ChunkPairCard } from '@/components/ChunkPairCard';
-import { Badge } from '@/components/ui/Badge';
+import { MarkdownBody } from '@/components/MarkdownBody';
 import { Spinner } from '@/components/ui/Spinner';
 import type { LearningSession } from '@/lib/types';
 
@@ -65,50 +65,18 @@ export default function ReviewPage() {
         </div>
       </div>
 
-      {/* Rules doc (Markdown) — primary artifact for downstream prompts */}
       {session.rulesMarkdown?.trim() && (
         <section>
           <h2 className="text-lg font-semibold text-gray-800 mb-4">
-            Rules document
+            Synthesized rules
           </h2>
-          <p className="text-sm text-gray-500 mb-3">
-            Markdown synthesized from all chunk insights. Copy into another LLM as instructions.
+          <p className="text-sm text-gray-500 mb-4">
+            Derived from all chunk insights. Copy or reuse as instructions for another LLM.
           </p>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-            <pre className="text-sm text-slate-800 whitespace-pre-wrap break-words font-mono leading-relaxed max-h-[min(70vh,36rem)] overflow-y-auto">
-              {session.rulesMarkdown}
-            </pre>
-          </div>
-        </section>
-      )}
-
-      {/* Global patterns (structured) */}
-      {(session.globalPatterns?.length ?? 0) > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">
-            Global Patterns
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {(session.globalPatterns ?? []).map((pattern, i) => (
-              <div
-                key={i}
-                className="rounded-xl border border-indigo-100 bg-indigo-50 p-5"
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <h3 className="font-semibold text-indigo-900 text-sm">
-                    {pattern.patternType}
-                  </h3>
-                  <Badge label={`×${pattern.exampleCount}`} color="indigo" />
-                </div>
-                <p className="text-sm text-indigo-800 mb-3">{pattern.description}</p>
-                {pattern.examples.slice(0, 2).map((ex, j) => (
-                  <div key={j} className="text-xs rounded bg-white border border-indigo-100 p-2 mb-1">
-                    <span className="text-red-600 line-through mr-2">{ex.source}</span>
-                    <span className="text-green-700">{ex.target}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
+          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="max-h-[min(75vh,40rem)] overflow-y-auto">
+              <MarkdownBody markdown={session.rulesMarkdown} />
+            </div>
           </div>
         </section>
       )}

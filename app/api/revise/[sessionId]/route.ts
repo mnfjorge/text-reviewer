@@ -30,12 +30,9 @@ export async function POST(
     );
   }
 
-  const hasPatterns =
-    session.globalPatterns && session.globalPatterns.length > 0;
-  const hasRules = session.rulesMarkdown?.trim();
-  if (!hasPatterns && !hasRules) {
+  if (!session.rulesMarkdown?.trim()) {
     return NextResponse.json(
-      { error: 'Session has no learned patterns or rules document to apply' },
+      { error: 'Session has no rules document to apply' },
       { status: 422 },
     );
   }

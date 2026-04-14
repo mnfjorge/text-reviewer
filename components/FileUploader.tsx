@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { upload } from '@vercel/blob/client';
+import { MarkdownBody } from './MarkdownBody';
 import { Button } from './ui/Button';
 import { Spinner } from './ui/Spinner';
 import {
@@ -13,7 +14,6 @@ import type {
   AnalyzeRequest,
   AnalyzeStreamEvent,
   ChunkAnalysis,
-  GlobalPattern,
   ParseResponse,
   SessionPipelineState,
 } from '@/lib/types';
@@ -183,9 +183,6 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
   const [streamingAnalyses, setStreamingAnalyses] = useState<ChunkAnalysis[]>(
     [],
   );
-  const [streamingSynthesis, setStreamingSynthesis] = useState<
-    GlobalPattern[] | null
-  >(null);
   const [streamingRulesMarkdown, setStreamingRulesMarkdown] = useState<
     string | null
   >(null);
@@ -230,7 +227,6 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
             setProgress((p) => ({ ...p, current: event.chunkIndex + 1 }));
             setStreamingAnalyses((prev) => [...prev, event.analysis]);
           } else if (event.type === 'synthesis') {
-            setStreamingSynthesis(event.globalPatterns);
             setStreamingRulesMarkdown(
               event.rulesMarkdown?.trim() ? event.rulesMarkdown : null,
             );
@@ -257,7 +253,6 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
         total: pairsCapped.length,
       });
       setStreamingAnalyses([...existingCapped]);
-      setStreamingSynthesis(null);
       setStreamingRulesMarkdown(null);
 
       const analyzeBody: AnalyzeRequest = {
@@ -327,9 +322,6 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
         if (data.analyses?.length) {
           setStreamingAnalyses(data.analyses);
         }
-        if (data.globalPatterns?.length) {
-          setStreamingSynthesis(data.globalPatterns);
-        }
         if (data.rulesMarkdown?.trim()) {
           setStreamingRulesMarkdown(data.rulesMarkdown);
         }
@@ -350,9 +342,9 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
           pairsLen > 0 &&
           done > 0 &&
           done < pairsLen;
-        const synthesisDone =
-          (data.globalPatterns && data.globalPatterns.length > 0) ||
-          !!(data.rulesMarkdown && data.rulesMarkdown.trim().length > 0);
+        const synthesisDone = !!(
+          data.rulesMarkdown && data.rulesMarkdown.trim().length > 0
+        );
         const finishSynthesisResume =
           data.stage === 'analyzing' &&
           pairsLen > 0 &&
@@ -414,10 +406,8 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
       (savedPipeline.stage === 'analyzing' &&
         (savedPipeline.analyses?.length ?? 0) >= savedPipeline.pairs!.length &&
         !(
-          (savedPipeline.globalPatterns &&
-            savedPipeline.globalPatterns.length > 0) ||
-          (savedPipeline.rulesMarkdown &&
-            savedPipeline.rulesMarkdown.trim().length > 0)
+          savedPipeline.rulesMarkdown &&
+          savedPipeline.rulesMarkdown.trim().length > 0
         )));
 
   const canSubmit =
@@ -432,7 +422,6 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
     setError(null);
     if (!resumeStarted.current) {
       setStreamingAnalyses([]);
-      setStreamingSynthesis(null);
       setStreamingRulesMarkdown(null);
     }
     setUploadPctA(0);
@@ -590,9 +579,7 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
-      {(streamingAnalyses.length > 0 ||
-        streamingSynthesis ||
-        streamingRulesMarkdown) && (
+      {(streamingAnalyses.length > 0 || streamingRulesMarkdown) && (
         <div className="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
             <h2 className="text-sm font-semibold text-gray-800">
@@ -650,46 +637,16 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
             ))}
 
             {streamingRulesMarkdown && (
-              <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
                 <p className="text-sm font-semibold text-slate-800 mb-2">
-                  Rules document (Markdown)
+                  Synthesized rules
                 </p>
-                <p className="text-xs text-slate-500 mb-2">
-                  For use as a prompt in another workflow.
+                <p className="text-xs text-slate-500 mb-3">
+                  Rendered Markdown — use as a prompt in another workflow.
                 </p>
-                <pre className="text-xs text-slate-800 whitespace-pre-wrap break-words font-mono bg-white border border-slate-200 rounded p-3 max-h-64 overflow-y-auto">
-                  {streamingRulesMarkdown}
-                </pre>
-              </div>
-            )}
-            {streamingSynthesis && streamingSynthesis.length > 0 && (
-              <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-4">
-                <p className="text-sm font-semibold text-indigo-900 mb-3">
-                  Cross-chunk synthesis (structured)
-                </p>
-                <ul className="space-y-3">
-                  {streamingSynthesis.map((gp, i) => (
-                    <li key={i} className="text-sm text-gray-800">
-                      <span className="font-medium text-indigo-800">
-                        {gp.patternType}
-                      </span>
-                      <p className="text-gray-700 mt-1">{gp.description}</p>
-                      {gp.examples.length > 0 && (
-                        <ul className="mt-2 space-y-1 text-xs text-gray-600 list-disc pl-4">
-                          {gp.examples.slice(0, 3).map((ex, j) => (
-                            <li key={j}>
-                              <span className="text-red-700">{ex.source}</span>
-                              {' → '}
-                              <span className="text-green-700">
-                                {ex.target}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                <div className="max-h-80 overflow-y-auto border border-slate-100 rounded-lg p-4 bg-slate-50/50">
+                  <MarkdownBody markdown={streamingRulesMarkdown} />
+                </div>
               </div>
             )}
           </div>
@@ -718,7 +675,6 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
               setUploadPctA(null);
               setUploadPctB(null);
               setStreamingAnalyses([]);
-              setStreamingSynthesis(null);
               setStreamingRulesMarkdown(null);
             }}
           >
