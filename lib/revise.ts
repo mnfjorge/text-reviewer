@@ -24,7 +24,8 @@ Sua tarefa:
 - Aplique essas convenções com fidelidade e consistência ao revisar o texto enviado pelo usuário.
 - Preserve o sentido original e não acrescente informações novas.
 - Mantenha o **idioma do texto de entrada** na resposta (revise no mesmo idioma em que o usuário escreveu).
-- Devolva **somente** o texto revisado — sem comentários, explicações ou preâmbulo.`;
+- Devolva **somente** o texto revisado — sem comentários, explicações ou preâmbulo.
+- O texto deve ser formatado em texto plano (sem markdown) e codificado em UTF-8;`;
 }
 
 /**
