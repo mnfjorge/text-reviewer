@@ -36,6 +36,13 @@ export interface GlobalPattern {
   examples: Array<{ source: string; target: string }>;
 }
 
+/** Result of cross-chunk synthesis: structured patterns plus a prompt-ready rules doc. */
+export interface SynthesisOutcome {
+  /** Markdown suitable to paste as instructions for another LLM (headings, imperative rules). */
+  rulesMarkdown: string;
+  globalPatterns: GlobalPattern[];
+}
+
 // ---- Stored Learning ----
 
 export interface LearningSession {
@@ -48,6 +55,8 @@ export interface LearningSession {
   pairs: ChunkPair[];
   analyses: ChunkAnalysis[];
   globalPatterns: GlobalPattern[];
+  /** Synthesized revision/localization rules as Markdown (for downstream prompts). */
+  rulesMarkdown?: string;
   blobUrl: string;
 }
 
@@ -90,6 +99,8 @@ export interface SessionPipelineState {
   pairs?: ChunkPair[];
   analyses?: ChunkAnalysis[];
   globalPatterns?: GlobalPattern[];
+  /** Markdown rules doc from synthesis (same content intent as learnings blob). */
+  rulesMarkdown?: string;
   learningBlobUrl?: string;
   createdAt?: string;
 }
@@ -109,6 +120,10 @@ export interface AnalyzeRequest {
 export type AnalyzeStreamEvent =
   | { type: 'chunk_start'; chunkIndex: number; total: number }
   | { type: 'chunk_complete'; chunkIndex: number; analysis: ChunkAnalysis }
-  | { type: 'synthesis'; globalPatterns: GlobalPattern[] }
+  | {
+      type: 'synthesis';
+      globalPatterns: GlobalPattern[];
+      rulesMarkdown: string;
+    }
   | { type: 'saved'; learningId: string; blobUrl: string }
   | { type: 'error'; message: string };

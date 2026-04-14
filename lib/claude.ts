@@ -1,5 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { ChunkAnalysis, ChunkPair, GlobalPattern } from './types';
+import type {
+  ChunkAnalysis,
+  ChunkPair,
+  GlobalPattern,
+  SynthesisOutcome,
+} from './types';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -28,16 +33,19 @@ Rules:
 
 const SYNTHESIS_SYSTEM_PROMPT = `You are an expert linguistic analyst. You have been given **chunk-level insights** from comparing a source document to a target document across many aligned sections.
 
-Your task is to synthesize **high-level, recurring themes** as \`globalPatterns\`. Each should generalize what reviewers learned across chunks—not restate one chunk. Focus on patterns that repeat or clearly generalize; skip one-off trivia. Skip already standardized linguistics and formatting rules.
+Produce two linked outputs in JSON:
 
-Each global pattern must have:
-- patternType: short name (e.g. 'Honorific localization')
-- description: when it applies and what to do
-- exampleCount: approximate how many chunks reflected this (estimate if needed)
-- examples: 1–3 short { source, target } illustrations (≤20 words each), drawn or paraphrased from the insight material
+1) **rulesMarkdown** — A single Markdown document that will be pasted later as **instructions for another LLM** applying the same document pair’s conventions. Requirements:
+   - Start with a level-1 title naming the document pair and purpose (e.g. revision / localization rules).
+   - Use \`##\` sections for each major theme (match the high-level patterns you infer).
+   - Use **imperative**, testable bullets (what to do / what to avoid), not vague prose.
+   - Where helpful, add short **sub-bullets** with concrete before→after or terminology guidance drawn from the insights.
+   - Prefer depth over repetition; merge duplicate themes.
+   - If any chunk had non-empty insights, **rulesMarkdown must be substantive** (not an empty string and not a single generic sentence).
 
-Rules:
-- Focus on patterns that repeat or clearly generalize; skip one-off trivia.`;
+2) **globalPatterns** — The same themes in structured form for dashboards: 3–10 items when insights support it (minimum 1 if any insight text existed). Each item: patternType, description, exampleCount, examples (1–3 { source, target } pairs, ≤20 words each).
+
+If every chunk’s insights were empty, \`globalPatterns\` may be [] and \`rulesMarkdown\` may briefly state that no rules could be inferred.`;
 
 interface RawChunkResult {
   insights: Array<{ insight: string; basis?: string }>;
@@ -93,17 +101,66 @@ const globalPatternItemSchema: Record<string, unknown> = {
 const SYNTHESIS_OUTPUT_SCHEMA: Record<string, unknown> = {
   type: 'object',
   properties: {
+    rulesMarkdown: { type: 'string' },
     globalPatterns: {
       type: 'array',
       items: globalPatternItemSchema,
     },
   },
-  required: ['globalPatterns'],
+  required: ['rulesMarkdown', 'globalPatterns'],
   additionalProperties: false,
 };
 
 interface RawSynthesisResult {
+  rulesMarkdown: string;
   globalPatterns: GlobalPattern[];
+}
+
+function normalizeGlobalPatterns(raw: unknown): GlobalPattern[] {
+  if (!Array.isArray(raw)) return [];
+  const out: GlobalPattern[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const patternType = String(o.patternType ?? '').trim() || 'Pattern';
+    const description = String(o.description ?? '').trim() || '';
+    const exampleCount =
+      typeof o.exampleCount === 'number' && Number.isFinite(o.exampleCount)
+        ? o.exampleCount
+        : 0;
+    let examples: GlobalPattern['examples'] = [];
+    if (Array.isArray(o.examples)) {
+      examples = o.examples
+        .filter((e) => e && typeof e === 'object')
+        .map((e) => {
+          const ex = e as Record<string, unknown>;
+          return {
+            source: String(ex.source ?? '').trim(),
+            target: String(ex.target ?? '').trim(),
+          };
+        })
+        .filter((e) => e.source.length > 0 || e.target.length > 0);
+    }
+    if (examples.length === 0) {
+      examples = [{ source: '(see description)', target: '(see description)' }];
+    }
+    out.push({ patternType, description, exampleCount, examples });
+  }
+  return out;
+}
+
+function parseSynthesisOutcome(rawText: string): SynthesisOutcome {
+  try {
+    const parsed = JSON.parse(rawText) as RawSynthesisResult;
+    const rulesMarkdown =
+      typeof parsed.rulesMarkdown === 'string' ? parsed.rulesMarkdown.trim() : '';
+    return {
+      rulesMarkdown,
+      globalPatterns: normalizeGlobalPatterns(parsed.globalPatterns),
+    };
+  } catch {
+    return { rulesMarkdown: '', globalPatterns: [] };
+  }
 }
 
 function formatChunkWindow(
@@ -193,7 +250,7 @@ ${formatChunkWindow('NEXT', next, totalChunks)}`;
 export async function synthesizePatterns(
   analyses: ChunkAnalysis[],
   fileNames: { a: string; b: string },
-): Promise<GlobalPattern[]> {
+): Promise<SynthesisOutcome> {
   const summary = analyses.map((a) => ({
     chunkIndex: a.chunkIndex,
     confidence: a.confidence,
@@ -211,7 +268,7 @@ ${JSON.stringify(summary, null, 2)}`;
 
   const response = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 2048,
+    max_tokens: 8192,
     system: [
       {
         type: 'text',
@@ -231,10 +288,5 @@ ${JSON.stringify(summary, null, 2)}`;
   const rawText =
     response.content[0].type === 'text' ? response.content[0].text : '{}';
 
-  try {
-    const parsed = JSON.parse(rawText) as RawSynthesisResult;
-    return Array.isArray(parsed.globalPatterns) ? parsed.globalPatterns : [];
-  } catch {
-    return [];
-  }
+  return parseSynthesisOutcome(rawText);
 }

@@ -164,7 +164,13 @@ export default function ReviseSessionPage() {
             <span className="font-medium text-gray-800 text-sm">
               Learned patterns
             </span>
-            <Badge label={String(session.globalPatterns.length)} color="indigo" />
+            <Badge
+              label={String(session.globalPatterns?.length ?? 0)}
+              color="indigo"
+            />
+            {session.rulesMarkdown?.trim() && (
+              <Badge label="MD rules" color="gray" />
+            )}
           </div>
           <svg
             className={`h-4 w-4 text-gray-400 transition-transform ${patternsOpen ? 'rotate-180' : ''}`}
@@ -179,7 +185,17 @@ export default function ReviseSessionPage() {
 
         {patternsOpen && (
           <div className="border-t border-gray-100 divide-y divide-gray-50">
-            {session.globalPatterns.map((p, i) => (
+            {session.rulesMarkdown?.trim() && (
+              <div className="px-5 py-4 bg-slate-50/80">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                  Markdown rules (used first for revision)
+                </p>
+                <pre className="text-xs text-slate-800 whitespace-pre-wrap break-words font-mono max-h-48 overflow-y-auto">
+                  {session.rulesMarkdown}
+                </pre>
+              </div>
+            )}
+            {(session.globalPatterns ?? []).map((p, i) => (
               <div key={i} className="px-5 py-4">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-sm font-semibold text-indigo-700">

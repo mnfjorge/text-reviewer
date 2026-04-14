@@ -30,9 +30,12 @@ export async function POST(
     );
   }
 
-  if (!session.globalPatterns || session.globalPatterns.length === 0) {
+  const hasPatterns =
+    session.globalPatterns && session.globalPatterns.length > 0;
+  const hasRules = session.rulesMarkdown?.trim();
+  if (!hasPatterns && !hasRules) {
     return NextResponse.json(
-      { error: 'Session has no learned patterns to apply' },
+      { error: 'Session has no learned patterns or rules document to apply' },
       { status: 422 },
     );
   }

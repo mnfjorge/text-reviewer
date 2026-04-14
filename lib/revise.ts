@@ -5,6 +5,28 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = 'claude-sonnet-4-6';
 
 function buildRevisionSystemPrompt(session: LearningSession): string {
+  const tail = `Your task:
+- Apply these learned conventions faithfully and consistently to revise the user's input text.
+- Preserve the original meaning and do not add new information.
+- Return ONLY the revised text — no commentary, no explanation, no preamble.`;
+
+  if (session.rulesMarkdown?.trim()) {
+    return `You are a professional text editor and reviser.
+
+You have studied a document comparison session titled "${session.name}".
+The documents compared were: "${session.fileA.name}" (original) → "${session.fileB.name}" (revised).
+
+Follow the rules below (Markdown). They synthesize recurring patterns from that session.
+
+---
+
+${session.rulesMarkdown.trim()}
+
+---
+
+${tail}`;
+  }
+
   const patternList = session.globalPatterns
     .map((p, i) => {
       const examples = p.examples
@@ -24,10 +46,7 @@ The following transformation patterns were consistently applied across that sess
 
 ${patternList}
 
-Your task:
-- Apply these learned patterns faithfully and consistently to revise the user's input text.
-- Preserve the original meaning and do not add new information.
-- Return ONLY the revised text — no commentary, no explanation, no preamble.`;
+${tail}`;
 }
 
 /**

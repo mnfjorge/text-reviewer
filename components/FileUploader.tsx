@@ -186,6 +186,9 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
   const [streamingSynthesis, setStreamingSynthesis] = useState<
     GlobalPattern[] | null
   >(null);
+  const [streamingRulesMarkdown, setStreamingRulesMarkdown] = useState<
+    string | null
+  >(null);
   const [pipelineHydrated, setPipelineHydrated] = useState(false);
   const [savedPipeline, setSavedPipeline] =
     useState<SessionPipelineState | null>(null);
@@ -228,6 +231,9 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
             setStreamingAnalyses((prev) => [...prev, event.analysis]);
           } else if (event.type === 'synthesis') {
             setStreamingSynthesis(event.globalPatterns);
+            setStreamingRulesMarkdown(
+              event.rulesMarkdown?.trim() ? event.rulesMarkdown : null,
+            );
           } else if (event.type === 'saved') {
             setStatus('done');
             router.push(`/review/${event.learningId}`);
@@ -252,6 +258,7 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
       });
       setStreamingAnalyses([...existingCapped]);
       setStreamingSynthesis(null);
+      setStreamingRulesMarkdown(null);
 
       const analyzeBody: AnalyzeRequest = {
         sessionId: parsed.sessionId,
@@ -323,6 +330,9 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
         if (data.globalPatterns?.length) {
           setStreamingSynthesis(data.globalPatterns);
         }
+        if (data.rulesMarkdown?.trim()) {
+          setStreamingRulesMarkdown(data.rulesMarkdown);
+        }
         if (data.pairs?.length) {
           setProgress({
             current: data.analyses?.length ?? 0,
@@ -335,15 +345,24 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
 
         const pairsLen = data.pairs?.length ?? 0;
         const done = data.analyses?.length ?? 0;
-        if (
+        const partialChunkResume =
           data.stage === 'analyzing' &&
           pairsLen > 0 &&
           done > 0 &&
-          done < pairsLen
-        ) {
+          done < pairsLen;
+        const synthesisDone =
+          (data.globalPatterns && data.globalPatterns.length > 0) ||
+          !!(data.rulesMarkdown && data.rulesMarkdown.trim().length > 0);
+        const finishSynthesisResume =
+          data.stage === 'analyzing' &&
+          pairsLen > 0 &&
+          done > 0 &&
+          done >= pairsLen &&
+          !synthesisDone;
+
+        if (partialChunkResume || finishSynthesisResume) {
           resumeStarted.current = true;
           if (submitInFlight.current) {
-            setPipelineHydrated(true);
             return;
           }
           submitInFlight.current = true;
@@ -391,7 +410,15 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
     !!savedPipeline.fileB &&
     (savedPipeline.stage === 'parsed' ||
       (savedPipeline.stage === 'analyzing' &&
-        (savedPipeline.analyses?.length ?? 0) < savedPipeline.pairs!.length));
+        (savedPipeline.analyses?.length ?? 0) < savedPipeline.pairs!.length) ||
+      (savedPipeline.stage === 'analyzing' &&
+        (savedPipeline.analyses?.length ?? 0) >= savedPipeline.pairs!.length &&
+        !(
+          (savedPipeline.globalPatterns &&
+            savedPipeline.globalPatterns.length > 0) ||
+          (savedPipeline.rulesMarkdown &&
+            savedPipeline.rulesMarkdown.trim().length > 0)
+        )));
 
   const canSubmit =
     pipelineHydrated &&
@@ -406,6 +433,7 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
     if (!resumeStarted.current) {
       setStreamingAnalyses([]);
       setStreamingSynthesis(null);
+      setStreamingRulesMarkdown(null);
     }
     setUploadPctA(0);
     setUploadPctB(0);
@@ -562,7 +590,9 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
-      {(streamingAnalyses.length > 0 || streamingSynthesis) && (
+      {(streamingAnalyses.length > 0 ||
+        streamingSynthesis ||
+        streamingRulesMarkdown) && (
         <div className="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
             <h2 className="text-sm font-semibold text-gray-800">
@@ -619,10 +649,23 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
               </div>
             ))}
 
+            {streamingRulesMarkdown && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-4">
+                <p className="text-sm font-semibold text-slate-800 mb-2">
+                  Rules document (Markdown)
+                </p>
+                <p className="text-xs text-slate-500 mb-2">
+                  For use as a prompt in another workflow.
+                </p>
+                <pre className="text-xs text-slate-800 whitespace-pre-wrap break-words font-mono bg-white border border-slate-200 rounded p-3 max-h-64 overflow-y-auto">
+                  {streamingRulesMarkdown}
+                </pre>
+              </div>
+            )}
             {streamingSynthesis && streamingSynthesis.length > 0 && (
               <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-4">
                 <p className="text-sm font-semibold text-indigo-900 mb-3">
-                  Cross-chunk synthesis
+                  Cross-chunk synthesis (structured)
                 </p>
                 <ul className="space-y-3">
                   {streamingSynthesis.map((gp, i) => (
@@ -676,6 +719,7 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
               setUploadPctB(null);
               setStreamingAnalyses([]);
               setStreamingSynthesis(null);
+              setStreamingRulesMarkdown(null);
             }}
           >
             Reset

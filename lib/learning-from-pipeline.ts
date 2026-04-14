@@ -4,11 +4,10 @@ export function learningSessionFromPipeline(
   state: SessionPipelineState,
   blobUrl: string,
 ): LearningSession | null {
-  if (
-    !state.pairs?.length ||
-    !state.analyses?.length ||
-    state.globalPatterns === undefined
-  ) {
+  if (!state.pairs?.length || !state.analyses?.length) {
+    return null;
+  }
+  if (state.globalPatterns === undefined && state.rulesMarkdown === undefined) {
     return null;
   }
 
@@ -29,7 +28,8 @@ export function learningSessionFromPipeline(
     chunkCount: state.pairs.length,
     pairs: state.pairs,
     analyses: state.analyses,
-    globalPatterns: state.globalPatterns,
+    globalPatterns: state.globalPatterns ?? [],
+    rulesMarkdown: state.rulesMarkdown ?? '',
     blobUrl,
   };
 }

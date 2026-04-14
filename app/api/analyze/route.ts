@@ -89,7 +89,6 @@ export async function POST(request: NextRequest): Promise<Response> {
         await putSessionPipelineState(baseState);
 
         for (let i = existing.length; i < pairsLimited.length; i++) {
-          const pair = pairsLimited[i];
           send({
             type: 'chunk_start',
             chunkIndex: i,
@@ -108,18 +107,23 @@ export async function POST(request: NextRequest): Promise<Response> {
           send({ type: 'chunk_complete', chunkIndex: i, analysis });
         }
 
-        const globalPatterns = await synthesizePatterns(analyses, {
+        const synthesis = await synthesizePatterns(analyses, {
           a: fileAMerged.name,
           b: fileBMerged.name,
         });
-        send({ type: 'synthesis', globalPatterns });
+        send({
+          type: 'synthesis',
+          globalPatterns: synthesis.globalPatterns,
+          rulesMarkdown: synthesis.rulesMarkdown,
+        });
 
         await putSessionPipelineState({
           ...baseState,
           updatedAt: new Date().toISOString(),
           stage: 'synthesized',
           analyses,
-          globalPatterns,
+          globalPatterns: synthesis.globalPatterns,
+          rulesMarkdown: synthesis.rulesMarkdown,
         });
 
         const sessionPayload: SessionPipelineState = {
@@ -127,7 +131,8 @@ export async function POST(request: NextRequest): Promise<Response> {
           updatedAt: new Date().toISOString(),
           stage: 'synthesized',
           analyses,
-          globalPatterns,
+          globalPatterns: synthesis.globalPatterns,
+          rulesMarkdown: synthesis.rulesMarkdown,
           createdAt,
         };
 

@@ -65,14 +65,31 @@ export default function ReviewPage() {
         </div>
       </div>
 
-      {/* Global patterns */}
-      {session.globalPatterns.length > 0 && (
+      {/* Rules doc (Markdown) — primary artifact for downstream prompts */}
+      {session.rulesMarkdown?.trim() && (
+        <section>
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">
+            Rules document
+          </h2>
+          <p className="text-sm text-gray-500 mb-3">
+            Markdown synthesized from all chunk insights. Copy into another LLM as instructions.
+          </p>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+            <pre className="text-sm text-slate-800 whitespace-pre-wrap break-words font-mono leading-relaxed max-h-[min(70vh,36rem)] overflow-y-auto">
+              {session.rulesMarkdown}
+            </pre>
+          </div>
+        </section>
+      )}
+
+      {/* Global patterns (structured) */}
+      {(session.globalPatterns?.length ?? 0) > 0 && (
         <section>
           <h2 className="text-lg font-semibold text-gray-800 mb-4">
             Global Patterns
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            {session.globalPatterns.map((pattern, i) => (
+            {(session.globalPatterns ?? []).map((pattern, i) => (
               <div
                 key={i}
                 className="rounded-xl border border-indigo-100 bg-indigo-50 p-5"
