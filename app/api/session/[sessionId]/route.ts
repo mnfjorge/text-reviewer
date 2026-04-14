@@ -16,7 +16,7 @@ export async function GET(
     return NextResponse.json(state);
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : 'Failed to load session state';
+      err instanceof Error ? err.message : 'Falha ao carregar estado da sessão';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -14,8 +14,9 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Text Reviewer",
-  description: "Compare document versions and learn translation/review patterns with AI",
+  title: "Revisor de texto",
+  description:
+    "Compare versões de documentos e aprenda padrões de tradução e revisão com IA",
 };
 
 export default function RootLayout({
@@ -24,27 +25,27 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50 min-h-screen`}
       >
         <nav className="border-b border-gray-200 bg-white">
           <div className="mx-auto max-w-5xl px-6 py-4 flex items-center justify-between">
             <a href="/" className="text-base font-semibold text-gray-900">
-              Text Reviewer
+              Revisor de texto
             </a>
             <div className="flex items-center gap-5">
               <a
                 href="/revise"
                 className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
               >
-                Revise
+                Revisar
               </a>
               <a
                 href="/learnings"
                 className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
               >
-                Learnings
+                Aprendizados
               </a>
             </div>
           </div>

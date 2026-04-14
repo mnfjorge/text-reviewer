@@ -20,11 +20,11 @@ export async function POST(
   try {
     const state = await getSessionPipelineState(sessionId);
     if (!state) {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Sessão não encontrada' }, { status: 404 });
     }
     if (state.stage !== 'synthesized') {
       return NextResponse.json(
-        { error: 'Session is not ready to persist' },
+        { error: 'A sessão não está pronta para persistir' },
         { status: 400 },
       );
     }
@@ -36,7 +36,7 @@ export async function POST(
     );
     if (!session) {
       return NextResponse.json(
-        { error: 'Incomplete session data' },
+        { error: 'Dados da sessão incompletos' },
         { status: 400 },
       );
     }
@@ -53,7 +53,7 @@ export async function POST(
     return NextResponse.json({ learningId: sessionId, blobUrl });
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : 'Failed to persist learning';
+      err instanceof Error ? err.message : 'Falha ao persistir aprendizado';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

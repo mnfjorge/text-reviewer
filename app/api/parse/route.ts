@@ -19,7 +19,7 @@ interface ParseRequestBody {
 async function fetchBlob(url: string): Promise<Buffer> {
   const result = await get(url, { access: 'private' });
   if (!result || result.statusCode !== 200 || !result.stream) {
-    throw new Error('Failed to fetch uploaded file');
+    throw new Error('Não foi possível baixar o arquivo enviado');
   }
   return Buffer.from(await new Response(result.stream).arrayBuffer());
 }
@@ -29,29 +29,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     body = (await request.json()) as ParseRequestBody;
   } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    return NextResponse.json({ error: 'Corpo da solicitação inválido' }, { status: 400 });
   }
 
   const { sessionId, fileA, fileB } = body;
 
   if (!sessionId?.trim()) {
-    return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
+    return NextResponse.json({ error: 'sessionId é obrigatório' }, { status: 400 });
   }
 
   if (!fileA?.url || !fileB?.url) {
-    return NextResponse.json({ error: 'Both fileA and fileB are required' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'É necessário enviar fileA e fileB' },
+      { status: 400 },
+    );
   }
 
-  for (const [label, file] of [['fileA', fileA], ['fileB', fileB]] as [string, typeof fileA][]) {
+  for (const { title, file } of [
+    { title: 'Arquivo A', file: fileA },
+    { title: 'Arquivo B', file: fileB },
+  ] as const) {
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: `${label} exceeds the 100 MB limit` },
+        { error: `${title} ultrapassa o limite de 100 MB` },
         { status: 400 },
       );
     }
     if (!isSupportedFile(file.name, 'application/octet-stream')) {
       return NextResponse.json(
-        { error: `${label} (${file.name}) is not a supported file type. Use PDF, DOCX, or TXT.` },
+        {
+          error: `${title} (${file.name}) não é um tipo suportado. Use PDF, DOCX ou TXT.`,
+        },
         { status: 400 },
       );
     }
@@ -94,7 +102,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json(response);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to parse files';
+    const message = err instanceof Error ? err.message : 'Falha ao processar os arquivos';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

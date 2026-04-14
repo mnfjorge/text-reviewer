@@ -11,11 +11,15 @@ export async function GET(
   try {
     const session = await getLearningSession(id);
     if (!session) {
-      return NextResponse.json({ error: 'Learning session not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Sessão de aprendizado não encontrada' },
+        { status: 404 },
+      );
     }
     return NextResponse.json(session);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to fetch learning';
+    const message =
+      err instanceof Error ? err.message : 'Falha ao buscar aprendizado';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -29,7 +33,8 @@ export async function DELETE(
     await deleteLearningSession(id);
     return new NextResponse(null, { status: 204 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to delete learning';
+    const message =
+      err instanceof Error ? err.message : 'Falha ao excluir aprendizado';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

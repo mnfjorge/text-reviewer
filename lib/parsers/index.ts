@@ -40,7 +40,7 @@ export async function parseFile(
   }
 
   throw new Error(
-    `Unsupported file type: ${filename}. Please upload a PDF, DOCX, DOC, or TXT file.`,
+    `Tipo de arquivo não suportado: ${filename}. Envie PDF, DOCX, DOC ou TXT.`,
   );
 }
 

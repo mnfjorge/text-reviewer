@@ -16,12 +16,12 @@ export default async function SessionWorkspacePage({
     <div>
       <div className="mb-10 text-center">
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-          Compare & Learn
+          Comparar e aprender
         </h1>
         <p className="mt-3 text-gray-500 max-w-xl mx-auto">
-          Upload two versions of the same document — an original and its
-          translation or reviewed copy. AI will analyze how the text changed
-          and store the patterns for future reference.
+          Envie duas versões do mesmo documento — o original e a tradução ou a
+          cópia revisada. A IA analisa como o texto mudou e guarda os padrões
+          para consulta futura.
         </p>
       </div>
       <FileUploader sessionId={sessionId} />

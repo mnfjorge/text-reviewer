@@ -10,7 +10,7 @@ interface LearningCardProps {
 }
 
 export function LearningCard({ meta, onDelete }: LearningCardProps) {
-  const date = new Date(meta.createdAt).toLocaleDateString(undefined, {
+  const date = new Date(meta.createdAt).toLocaleDateString('pt-BR', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -24,18 +24,23 @@ export function LearningCard({ meta, onDelete }: LearningCardProps) {
       </div>
       <div className="text-xs text-gray-600 space-y-1">
         <div>
-          <span className="font-medium text-gray-500">File A: </span>{meta.fileA}
+          <span className="font-medium text-gray-500">Arquivo A: </span>
+          {meta.fileA}
         </div>
         <div>
-          <span className="font-medium text-gray-500">File B: </span>{meta.fileB}
+          <span className="font-medium text-gray-500">Arquivo B: </span>
+          {meta.fileB}
         </div>
         <div>
-          <span className="font-medium text-gray-500">Chunks: </span>{meta.chunkCount}
+          <span className="font-medium text-gray-500">Trechos: </span>
+          {meta.chunkCount}
         </div>
       </div>
       <div className="flex items-center gap-2 mt-1">
         <Link href={`/review/${meta.id}`} className="flex-1">
-          <Button size="sm" variant="secondary" className="w-full">View</Button>
+          <Button size="sm" variant="secondary" className="w-full">
+            Ver
+          </Button>
         </Link>
         {onDelete && (
           <Button
@@ -43,7 +48,7 @@ export function LearningCard({ meta, onDelete }: LearningCardProps) {
             variant="danger"
             onClick={() => onDelete(meta.id)}
           >
-            Delete
+            Excluir
           </Button>
         )}
       </div>

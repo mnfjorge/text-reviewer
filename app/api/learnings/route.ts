@@ -8,7 +8,8 @@ export async function GET(): Promise<NextResponse> {
     const sessions = await listLearningSessions();
     return NextResponse.json(sessions);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to list learnings';
+    const message =
+      err instanceof Error ? err.message : 'Falha ao listar aprendizados';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

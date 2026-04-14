@@ -86,7 +86,7 @@ function DropZone({
     (f: File) => {
       if (f.size > MAX_BYTES) {
         alert(
-          `File is too large (${formatBytes(f.size)}). Maximum size is ${MAX_MB} MB.`,
+          `Arquivo muito grande (${formatBytes(f.size)}). O tamanho máximo é ${MAX_MB} MB.`,
         );
         return;
       }
@@ -146,14 +146,14 @@ function DropZone({
                 />
               </div>
               <p className="mt-1 text-xs text-indigo-600">
-                {uploadPct}% uploaded
+                {uploadPct}% enviado
               </p>
             </div>
           ) : uploadPct === 100 ? (
-            <p className="mt-2 text-xs text-green-600">Uploaded</p>
+            <p className="mt-2 text-xs text-green-600">Enviado</p>
           ) : (
             <p className="mt-2 text-xs text-indigo-600">
-              Click or drop to replace
+              Clique ou solte para substituir
             </p>
           )}
         </>
@@ -162,9 +162,9 @@ function DropZone({
           <div className="mb-2 text-2xl">📁</div>
           <p className="text-sm font-semibold text-gray-700">{label}</p>
           <p className="mt-1 text-xs text-gray-500">
-            PDF, DOCX, DOC, or TXT · max {MAX_MB} MB
+            PDF, DOCX, DOC ou TXT · máx. {MAX_MB} MB
           </p>
-          <p className="mt-3 text-xs text-indigo-600">Click or drag & drop</p>
+          <p className="mt-3 text-xs text-indigo-600">Clique ou arraste e solte</p>
         </>
       )}
     </div>
@@ -196,7 +196,7 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
     async (analyzeRes: Response) => {
       if (!analyzeRes.ok || !analyzeRes.body) {
         const text = await analyzeRes.text().catch(() => '');
-        throw new Error(text || 'Analysis request failed');
+        throw new Error(text || 'Falha na solicitação de análise');
       }
 
       const reader = analyzeRes.body.getReader();
@@ -377,7 +377,7 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
             };
             await runAnalyze(parsed, data.analyses ?? []);
           } catch (err) {
-            setError(err instanceof Error ? err.message : 'Resume failed');
+            setError(err instanceof Error ? err.message : 'Falha ao retomar');
             setStatus('error');
           } finally {
             submitInFlight.current = false;
@@ -485,12 +485,12 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
         await runAnalyze(parsed, existingFromSaved);
         return;
       } else {
-        throw new Error('Nothing to analyze');
+        throw new Error('Nada para analisar');
       }
 
       await runAnalyze(parsed, []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setError(err instanceof Error ? err.message : 'Algo deu errado');
       setStatus('error');
     } finally {
       submitInFlight.current = false;
@@ -498,19 +498,19 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
   }
 
   const statusLabel: Record<Status, string> = {
-    idle: 'Analyze documents',
-    uploading: 'Uploading…',
-    parsing: 'Parsing files…',
-    analyzing: 'Analyzing…',
-    done: 'Done!',
-    error: 'Try again',
+    idle: 'Analisar documentos',
+    uploading: 'Enviando…',
+    parsing: 'Lendo arquivos…',
+    analyzing: 'Analisando…',
+    done: 'Concluído!',
+    error: 'Tentar de novo',
   };
 
   if (!pipelineHydrated) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3">
         <Spinner size="lg" />
-        <p className="text-sm text-gray-500">Loading session…</p>
+        <p className="text-sm text-gray-500">Carregando sessão…</p>
       </div>
     );
   }
@@ -519,7 +519,7 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
     <div className="w-full max-w-3xl mx-auto">
       {!!savedPipeline?.pairs?.length && !hasLocalPair && (
         <div className="mb-4 rounded-lg border border-indigo-100 bg-indigo-50/80 px-4 py-3 text-sm text-indigo-900">
-          <p className="font-medium">Restored from this session</p>
+          <p className="font-medium">Restaurado desta sessão</p>
           <p className="mt-1 text-indigo-800/90">
             <SessionSourceDownloadLink
               sessionId={sessionId}
@@ -533,17 +533,18 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
               file={savedPipeline!.fileB!}
             />
             {' · '}
-            {savedPipeline!.pairs!.length} aligned chunk pairs
+            {savedPipeline!.pairs!.length} pares de trechos alinhados
           </p>
           <p className="mt-2 text-xs text-indigo-700/80">
-            Upload two new files to replace, or continue with Analyze below.
+            Envie dois arquivos novos para substituir ou continue com Analisar
+            abaixo.
           </p>
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <DropZone
-          label="File A — Original"
+          label="Arquivo A — original"
           file={fileA}
           uploadPct={uploadPctA}
           onFile={(f) => {
@@ -552,7 +553,7 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
           }}
         />
         <DropZone
-          label="File B — Reviewed / Translated"
+          label="Arquivo B — revisado / traduzido"
           file={fileB}
           uploadPct={uploadPctB}
           onFile={(f) => {
@@ -565,7 +566,7 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
       {status === 'analyzing' && progress.total > 0 && (
         <div className="mt-6">
           <div className="flex justify-between text-sm text-gray-600 mb-1">
-            <span>Analyzing chunks…</span>
+            <span>Analisando trechos…</span>
             <span>
               {progress.current} / {progress.total}
             </span>
@@ -583,10 +584,10 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
         <div className="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
             <h2 className="text-sm font-semibold text-gray-800">
-              AI output (streaming)
+              Saída da IA (em tempo real)
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              Chunk analyses and synthesis as they arrive from the model.
+              Análises por trecho e síntese conforme o modelo responde.
             </p>
           </div>
           <div className="max-h-[min(70vh,32rem)] overflow-y-auto p-4 space-y-4">
@@ -597,16 +598,16 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                   <span className="text-sm font-semibold text-gray-700">
-                    Chunk {analysis.chunkIndex + 1}
+                    Trecho {analysis.chunkIndex + 1}
                   </span>
                   <span className="text-xs text-gray-500">
-                    confidence {(analysis.confidence * 100).toFixed(0)}%
+                    confiança {(analysis.confidence * 100).toFixed(0)}%
                   </span>
                 </div>
                 {analysis.insights.length > 0 && (
                   <div className="space-y-2 mb-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                      Insights
+                      Observações
                     </p>
                     {analysis.insights.map((row, j) => (
                       <div
@@ -626,7 +627,7 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
                 {analysis.rawResponse.trim() && (
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">
-                      Raw model output
+                      Saída bruta do modelo
                     </p>
                     <pre className="text-xs text-gray-700 whitespace-pre-wrap break-words font-mono bg-white border border-gray-200 rounded p-3 max-h-48 overflow-y-auto">
                       {analysis.rawResponse}
@@ -639,10 +640,10 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
             {streamingRulesMarkdown && (
               <div className="rounded-lg border border-slate-200 bg-white p-4">
                 <p className="text-sm font-semibold text-slate-800 mb-2">
-                  Synthesized rules
+                  Regras sintetizadas
                 </p>
                 <p className="text-xs text-slate-500 mb-3">
-                  Rendered Markdown — use as a prompt in another workflow.
+                  Markdown renderizado — use como prompt em outro fluxo.
                 </p>
                 <div className="max-h-80 overflow-y-auto border border-slate-100 rounded-lg p-4 bg-slate-50/50">
                   <MarkdownBody markdown={streamingRulesMarkdown} />
@@ -678,7 +679,7 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
               setStreamingRulesMarkdown(null);
             }}
           >
-            Reset
+            Limpar
           </button>
         )}
       </div>

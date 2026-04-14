@@ -30,13 +30,13 @@ export async function POST(request: NextRequest): Promise<Response> {
   try {
     body = (await request.json()) as AnalyzeRequest;
   } catch {
-    return new Response('Invalid JSON body', { status: 400 });
+    return new Response('JSON inválido no corpo da solicitação', { status: 400 });
   }
 
   const { sessionId, pairs, fileA, fileB, name, existingAnalyses } = body;
 
   if (!sessionId || !pairs || pairs.length === 0) {
-    return new Response('sessionId and pairs are required', { status: 400 });
+    return new Response('sessionId e pairs são obrigatórios', { status: 400 });
   }
 
   const pairsLimited = limitPairsForAnalysis(pairs);
@@ -51,7 +51,10 @@ export async function POST(request: NextRequest): Promise<Response> {
 
       const existing = (existingAnalyses ?? []).slice(0, MAX_ANALYSIS_CHUNKS);
       if (existing.length > pairsLimited.length) {
-        send({ type: 'error', message: 'existingAnalyses longer than pairs' });
+        send({
+          type: 'error',
+          message: 'existingAnalyses é mais longo que pairs',
+        });
         controller.close();
         return;
       }
@@ -63,11 +66,11 @@ export async function POST(request: NextRequest): Promise<Response> {
         const createdAt = pipeline?.createdAt ?? new Date().toISOString();
 
         const fileAMerged = {
-          ...(pipeline?.fileA ?? { name: 'File A', size: 0 }),
+          ...(pipeline?.fileA ?? { name: 'Arquivo A', size: 0 }),
           ...(fileA ?? {}),
         };
         const fileBMerged = {
-          ...(pipeline?.fileB ?? { name: 'File B', size: 0 }),
+          ...(pipeline?.fileB ?? { name: 'Arquivo B', size: 0 }),
           ...(fileB ?? {}),
         };
 
@@ -135,7 +138,10 @@ export async function POST(request: NextRequest): Promise<Response> {
 
         const built = learningSessionFromPipeline(sessionPayload, '');
         if (!built) {
-          send({ type: 'error', message: 'Failed to build learning session' });
+          send({
+            type: 'error',
+            message: 'Não foi possível montar a sessão de aprendizado',
+          });
           return;
         }
 
@@ -157,7 +163,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         send({ type: 'saved', learningId: sessionId, blobUrl });
       } catch (err) {
         const message =
-          err instanceof Error ? err.message : 'Analysis failed';
+          err instanceof Error ? err.message : 'Falha na análise';
         send({ type: 'error', message });
       } finally {
         controller.close();

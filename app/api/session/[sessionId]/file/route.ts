@@ -15,7 +15,10 @@ export async function GET(
   const { sessionId } = await params;
   const side = request.nextUrl.searchParams.get('side');
   if (side !== 'a' && side !== 'b') {
-    return NextResponse.json({ error: 'Use side=a or side=b' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'Use side=a ou side=b' },
+      { status: 400 },
+    );
   }
 
   try {
@@ -23,7 +26,7 @@ export async function GET(
     const file = side === 'a' ? state?.fileA : state?.fileB;
     if (!file?.sourceUrl) {
       return NextResponse.json(
-        { error: 'Original file is not available for this session.' },
+        { error: 'O arquivo original não está disponível para esta sessão.' },
         { status: 404 },
       );
     }
@@ -31,7 +34,7 @@ export async function GET(
     const blob = await get(file.sourceUrl, { access: 'private' });
     if (!blob || blob.statusCode !== 200 || !blob.stream) {
       return NextResponse.json(
-        { error: 'Could not read file from storage.' },
+        { error: 'Não foi possível ler o arquivo no armazenamento.' },
         { status: 502 },
       );
     }
@@ -48,7 +51,7 @@ export async function GET(
     });
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : 'Failed to serve file download';
+      err instanceof Error ? err.message : 'Falha ao servir o download do arquivo';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

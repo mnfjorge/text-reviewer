@@ -7,12 +7,12 @@ const MODEL = 'claude-sonnet-4-6';
 function buildRevisionSystemPrompt(session: LearningSession): string {
   const md = session.rulesMarkdown?.trim() ?? '';
 
-  return `You are a professional text editor and reviser.
+  return `Você é um editor profissional e revisor de texto.
 
-You have studied a document comparison session titled "${session.name}".
-The documents compared were: "${session.fileA.name}" (original) → "${session.fileB.name}" (revised).
+Você estudou uma sessão de comparação de documentos intitulada "${session.name}".
+Os documentos comparados foram: "${session.fileA.name}" (original) → "${session.fileB.name}" (revisado / meta).
 
-Follow the rules below (Markdown). They synthesize recurring patterns from that session.
+Siga as regras abaixo (Markdown). Elas sintetizam padrões recorrentes dessa sessão.
 
 ---
 
@@ -20,15 +20,15 @@ ${md}
 
 ---
 
-Your task:
-- Apply these learned conventions faithfully and consistently to revise the user's input text.
-- Preserve the original meaning and do not add new information.
-- Return ONLY the revised text — no commentary, no explanation, no preamble.`;
+Sua tarefa:
+- Aplique essas convenções com fidelidade e consistência ao revisar o texto enviado pelo usuário.
+- Preserve o sentido original e não acrescente informações novas.
+- Mantenha o **idioma do texto de entrada** na resposta (revise no mesmo idioma em que o usuário escreveu).
+- Devolva **somente** o texto revisado — sem comentários, explicações ou preâmbulo.`;
 }
 
 /**
- * Streams a revised version of `text` using the rules learned in `session`.
- * Returns a ReadableStream of text chunks suitable for an SSE or plain-text streaming response.
+ * Transmite em fluxo uma versão revisada de `text` usando as regras aprendidas em `session`.
  */
 export async function streamRevision(
   text: string,
@@ -50,7 +50,7 @@ export async function streamRevision(
     messages: [
       {
         role: 'user',
-        content: `Please revise the following text:\n\n${text}`,
+        content: `Revise o texto a seguir conforme as regras acima:\n\n${text}`,
       },
     ],
   });

@@ -16,13 +16,13 @@ export function learningSessionFromPipeline(
     createdAt: state.createdAt ?? new Date().toISOString(),
     name:
       state.name ??
-      `${state.fileA?.name ?? 'File A'} vs ${state.fileB?.name ?? 'File B'}`,
+      `${state.fileA?.name ?? 'Arquivo A'} e ${state.fileB?.name ?? 'Arquivo B'}`,
     fileA: {
-      name: state.fileA?.name ?? 'File A',
+      name: state.fileA?.name ?? 'Arquivo A',
       size: state.fileA?.size ?? 0,
     },
     fileB: {
-      name: state.fileB?.name ?? 'File B',
+      name: state.fileB?.name ?? 'Arquivo B',
       size: state.fileB?.size ?? 0,
     },
     chunkCount: state.pairs.length,

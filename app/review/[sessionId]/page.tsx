@@ -17,7 +17,7 @@ export default function ReviewPage() {
   useEffect(() => {
     fetch(`/api/learnings/${sessionId}`)
       .then(async (res) => {
-        if (!res.ok) throw new Error('Session not found');
+        if (!res.ok) throw new Error('Sessão não encontrada');
         return res.json() as Promise<LearningSession>;
       })
       .then(setSession)
@@ -36,15 +36,15 @@ export default function ReviewPage() {
   if (error || !session) {
     return (
       <div className="text-center py-20">
-        <p className="text-red-600 mb-4">{error ?? 'Session not found'}</p>
+        <p className="text-red-600 mb-4">{error ?? 'Sessão não encontrada'}</p>
         <Link href="/" className="text-indigo-600 hover:underline text-sm">
-          ← Back to upload
+          ← Voltar ao envio
         </Link>
       </div>
     );
   }
 
-  const date = new Date(session.createdAt).toLocaleDateString(undefined, {
+  const date = new Date(session.createdAt).toLocaleDateString('pt-BR', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -55,23 +55,26 @@ export default function ReviewPage() {
       {/* Header */}
       <div>
         <Link href="/" className="text-sm text-indigo-600 hover:underline">
-          ← New analysis
+          ← Nova análise
         </Link>
         <h1 className="mt-3 text-2xl font-bold text-gray-900">{session.name}</h1>
         <div className="mt-1 flex flex-wrap items-center gap-4 text-sm text-gray-500">
           <span>{date}</span>
-          <span>{session.chunkCount} chunks</span>
-          <span>{session.fileA.name} vs {session.fileB.name}</span>
+          <span>{session.chunkCount} trechos</span>
+          <span>
+            {session.fileA.name} e {session.fileB.name}
+          </span>
         </div>
       </div>
 
       {session.rulesMarkdown?.trim() && (
         <section>
           <h2 className="text-lg font-semibold text-gray-800 mb-4">
-            Synthesized rules
+            Regras sintetizadas
           </h2>
           <p className="text-sm text-gray-500 mb-4">
-            Derived from all chunk insights. Copy or reuse as instructions for another LLM.
+            Derivadas de todas as observações por trecho. Copie ou reutilize como
+            instruções para outro modelo.
           </p>
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="max-h-[min(75vh,40rem)] overflow-y-auto">
@@ -84,7 +87,7 @@ export default function ReviewPage() {
       {/* Chunk-by-chunk analysis */}
       <section>
         <h2 className="text-lg font-semibold text-gray-800 mb-4">
-          Chunk Analysis
+          Análise por trecho
         </h2>
         <div className="space-y-3">
           {session.analyses.map((analysis) => {
@@ -99,7 +102,7 @@ export default function ReviewPage() {
           })}
         </div>
         <p className="mt-3 text-xs text-gray-400 text-center">
-          Expand each chunk to see source/target text and model insights
+          Expanda cada trecho para ver o texto fonte/meta e as observações do modelo
         </p>
       </section>
     </div>

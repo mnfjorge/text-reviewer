@@ -14,7 +14,7 @@ export default function LearningsPage() {
   useEffect(() => {
     fetch('/api/learnings')
       .then(async (res) => {
-        if (!res.ok) throw new Error('Failed to load learnings');
+        if (!res.ok) throw new Error('Não foi possível carregar os aprendizados');
         return res.json() as Promise<LearningMeta[]>;
       })
       .then(setSessions)
@@ -31,16 +31,16 @@ export default function LearningsPage() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Learnings</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Aprendizados</h1>
           <p className="mt-1 text-sm text-gray-500">
-            All stored document comparison sessions
+            Todas as sessões de comparação de documentos guardadas
           </p>
         </div>
         <Link
           href="/"
           className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
         >
-          New analysis
+          Nova análise
         </Link>
       </div>
 
@@ -58,9 +58,9 @@ export default function LearningsPage() {
 
       {!loading && !error && sessions.length === 0 && (
         <div className="text-center py-20 text-gray-400">
-          <p className="text-lg mb-2">No learnings yet</p>
+          <p className="text-lg mb-2">Ainda não há aprendizados</p>
           <Link href="/" className="text-sm text-indigo-600 hover:underline">
-            Run your first analysis →
+            Execute sua primeira análise →
           </Link>
         </div>
       )}

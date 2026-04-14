@@ -20,7 +20,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
     return NextResponse.json(jsonResponse);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Upload token error';
+    const message =
+      err instanceof Error ? err.message : 'Erro ao gerar token de envio';
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

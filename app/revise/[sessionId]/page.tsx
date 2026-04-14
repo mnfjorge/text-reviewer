@@ -32,12 +32,14 @@ export default function ReviseSessionPage() {
   useEffect(() => {
     fetch(`/api/learnings/${sessionId}`)
       .then(async (res) => {
-        if (!res.ok) throw new Error('Session not found');
+        if (!res.ok) throw new Error('Sessão não encontrada');
         return res.json() as Promise<LearningSession>;
       })
       .then(setSession)
       .catch((err: unknown) =>
-        setSessionError(err instanceof Error ? err.message : 'Failed to load session'),
+        setSessionError(
+          err instanceof Error ? err.message : 'Não foi possível carregar a sessão',
+        ),
       )
       .finally(() => setSessionLoading(false));
   }, [sessionId]);
@@ -69,11 +71,11 @@ export default function ReviseSessionPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Request failed' }));
-        throw new Error((err as { error?: string }).error ?? 'Request failed');
+        const err = await res.json().catch(() => ({ error: 'Falha na solicitação' }));
+        throw new Error((err as { error?: string }).error ?? 'Falha na solicitação');
       }
 
-      if (!res.body) throw new Error('No response body');
+      if (!res.body) throw new Error('Resposta sem corpo');
 
       setRevisionState('streaming');
 
@@ -89,7 +91,7 @@ export default function ReviseSessionPage() {
       setRevisionState('done');
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
-      setRevisionError(err instanceof Error ? err.message : 'Revision failed');
+      setRevisionError(err instanceof Error ? err.message : 'Falha na revisão');
       setRevisionState('error');
     }
   }
@@ -123,9 +125,9 @@ export default function ReviseSessionPage() {
   if (sessionError || !session) {
     return (
       <div className="text-center py-20">
-        <p className="text-gray-500 mb-4">{sessionError ?? 'Session not found'}</p>
+        <p className="text-gray-500 mb-4">{sessionError ?? 'Sessão não encontrada'}</p>
         <Link href="/revise" className="text-indigo-600 hover:underline text-sm">
-          ← Back to sessions
+          ← Voltar às sessões
         </Link>
       </div>
     );
@@ -140,7 +142,7 @@ export default function ReviseSessionPage() {
         <div>
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
             <Link href="/revise" className="hover:text-gray-700 transition-colors">
-              Revise
+              Revisar
             </Link>
             <span>/</span>
             <span className="text-gray-700">{session.name}</span>
@@ -148,7 +150,7 @@ export default function ReviseSessionPage() {
           <h1 className="text-2xl font-bold text-gray-900">{session.name}</h1>
           <p className="mt-1 text-sm text-gray-500">
             {session.fileA.name} → {session.fileB.name} &middot;{' '}
-            {session.chunkCount} chunks analyzed
+            {session.chunkCount} trechos analisados
           </p>
         </div>
       </div>
@@ -162,7 +164,7 @@ export default function ReviseSessionPage() {
             className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
           >
             <span className="font-medium text-gray-800 text-sm">
-              Learned rules (Markdown)
+              Regras aprendidas (Markdown)
             </span>
             <svg
               className={`h-4 w-4 text-gray-400 transition-transform ${patternsOpen ? 'rotate-180' : ''}`}
@@ -187,22 +189,22 @@ export default function ReviseSessionPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Input */}
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-gray-700">Input text</label>
+          <label className="text-sm font-medium text-gray-700">Texto de entrada</label>
           <textarea
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Paste or type the text you want to revise…"
+            placeholder="Cole ou digite o texto que deseja revisar…"
             rows={14}
             className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none font-mono leading-relaxed"
           />
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-400">
-              {inputText.trim().split(/\s+/).filter(Boolean).length} words
+              {inputText.trim().split(/\s+/).filter(Boolean).length} palavras
             </span>
             <div className="flex gap-2">
               {(revisionState === 'streaming' || revisionState === 'loading') && (
                 <Button variant="secondary" size="sm" onClick={handleStop}>
-                  Stop
+                  Parar
                 </Button>
               )}
               <Button
@@ -213,15 +215,15 @@ export default function ReviseSessionPage() {
                 {revisionState === 'loading' ? (
                   <>
                     <Spinner size="sm" />
-                    <span className="ml-2">Connecting…</span>
+                    <span className="ml-2">Conectando…</span>
                   </>
                 ) : revisionState === 'streaming' ? (
                   <>
                     <Spinner size="sm" />
-                    <span className="ml-2">Revising…</span>
+                    <span className="ml-2">Revisando…</span>
                   </>
                 ) : (
-                  'Revise'
+                  'Revisar'
                 )}
               </Button>
             </div>
@@ -231,14 +233,14 @@ export default function ReviseSessionPage() {
         {/* Output */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-gray-700">Revised text</label>
+            <label className="text-sm font-medium text-gray-700">Texto revisado</label>
             {outputText && (
               <button
                 type="button"
                 onClick={handleCopy}
                 className="text-xs text-indigo-600 hover:underline"
               >
-                {copied ? 'Copied!' : 'Copy'}
+                {copied ? 'Copiado!' : 'Copiar'}
               </button>
             )}
           </div>
@@ -253,9 +255,9 @@ export default function ReviseSessionPage() {
             {outputText || (
               <span className="italic">
                 {revisionState === 'idle'
-                  ? 'Revised text will appear here…'
+                  ? 'O texto revisado aparecerá aqui…'
                   : revisionState === 'loading'
-                    ? 'Starting revision…'
+                    ? 'Iniciando revisão…'
                     : ''}
               </span>
             )}
@@ -265,7 +267,7 @@ export default function ReviseSessionPage() {
           </div>
           {revisionState === 'done' && outputText && (
             <span className="text-xs text-gray-400 text-right">
-              {outputText.trim().split(/\s+/).filter(Boolean).length} words
+              {outputText.trim().split(/\s+/).filter(Boolean).length} palavras
             </span>
           )}
           {revisionState === 'error' && revisionError && (

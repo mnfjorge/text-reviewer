@@ -7,16 +7,16 @@ import { learningSessionFromPipeline } from '@/lib/learning-from-pipeline';
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const sessionId = request.nextUrl.searchParams.get('sessionId');
   if (!sessionId) {
-    return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
+    return NextResponse.json({ error: 'sessionId é obrigatório' }, { status: 400 });
   }
 
   const pipeline = await getSessionPipelineState(sessionId);
   if (!pipeline) {
-    return NextResponse.json({ error: 'session not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Sessão não encontrada' }, { status: 404 });
   }
 
   if (!pipeline.analyses || pipeline.analyses.length === 0) {
-    return NextResponse.json({ error: 'analyses not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Análises não encontradas' }, { status: 404 });
   }
 
   const rulesMarkdown = await synthesizePatterns(pipeline.analyses, {
@@ -36,7 +36,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const built = learningSessionFromPipeline(sessionPayload, '');
   if (!built) {
-    return NextResponse.json({ error: 'could not build learning session', sessionPayload })
+    return NextResponse.json(
+      { error: 'Não foi possível montar a sessão de aprendizado' },
+      { status: 500 },
+    );
   }
 
   const session: LearningSession = {

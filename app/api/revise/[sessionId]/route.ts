@@ -15,24 +15,24 @@ export async function POST(
     const body = await req.json();
     text = typeof body.text === 'string' ? body.text.trim() : '';
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return NextResponse.json({ error: 'JSON inválido no corpo' }, { status: 400 });
   }
 
   if (!text) {
-    return NextResponse.json({ error: 'text is required' }, { status: 400 });
+    return NextResponse.json({ error: 'O campo text é obrigatório' }, { status: 400 });
   }
 
   const session = await getLearningSession(sessionId);
   if (!session) {
     return NextResponse.json(
-      { error: 'Learning session not found' },
+      { error: 'Sessão de aprendizado não encontrada' },
       { status: 404 },
     );
   }
 
   if (!session.rulesMarkdown?.trim()) {
     return NextResponse.json(
-      { error: 'Session has no rules document to apply' },
+      { error: 'A sessão não tem documento de regras para aplicar' },
       { status: 422 },
     );
   }

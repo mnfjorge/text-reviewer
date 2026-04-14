@@ -7,39 +7,36 @@ const anthropic = new Anthropic({
 
 const MODEL = 'claude-sonnet-4-6';
 
-const CHUNK_SYSTEM_PROMPT = `You are an expert linguistic analyst specializing in document comparison.
-For each request you see **three windows** of aligned text: optional PREVIOUS chunk pair, **CURRENT** chunk pair, optional NEXT chunk pair. Each window has SOURCE and TARGET for the same stretch of the document.
+const CHUNK_SYSTEM_PROMPT = `Você é um analista linguístico especializado em comparação de documentos.
+Em cada solicitação você vê **três janelas** de texto alinhado: par opcional **ANTERIOR**, par **ATUAL** e par opcional **SEGUINTE**. Cada janela contém **FONTE** e **META** para o mesmo trecho do documento.
 
-The pipeline may mis-align slightly at chunk boundaries. Use PREVIOUS and NEXT **only as context**—to see how sentences continue, fix skew, or spot rules that span a boundary. Your JSON response must still reflect insights for the **CURRENT** pair: prioritize observations grounded in the CURRENT SOURCE vs CURRENT TARGET. Mention neighbors in a \`basis\` line only when that context is essential.
+O processamento pode desalinhar levemente nos limites dos trechos. Use ANTERIOR e SEGUINTE **apenas como contexto** — para ver continuidade, corrigir desvio ou captar regras que atravessam o limite. Sua resposta JSON deve refletir observações do par **ATUAL**: priorize o que está ancorado na FONTE vs META **atuais**. Use o campo \`basis\` só quando o contexto vizinho for essencial.
 
-Your job is NOT to list every edit or micro-diff. Instead, produce **insights**: concise, reusable reasoning a human reviewer would want to remember—conventions, equivalences, tone or register choices, cultural adaptation, terminology policy, and *why* the target reads as it does relative to the source.
+Sua tarefa **não** é listar todas as microedições. Produza **insights**: raciocínios concisos e reutilizáveis que um revisor queira lembrar — convenções, equivalências, tom ou registro, adaptação cultural, política terminológica e *por que* a leitura na META difere da FONTE.
 
-Good insight examples (illustrative):
-- "In this Portuguese text, honorific 'Sri' is rendered as 'Senhor' before names; expect Sri → Senhor for the same devotional register."
-- "The target uses sentence case for section headings while the source used title case; carry that style forward."
-- "Technical acronym X is expanded on first use in the target only; follow that pattern for consistency."
+**Idioma (obrigatório):** Todo o texto em \`insight\` e, se existir, em \`basis\` deve estar em **português do Brasil (pt-BR)**. Citações muito curtas dos documentos podem manter o idioma original entre aspas; o comentário ao redor permanece em pt-BR.
 
-Rules:
-- Each insight should stand alone as guidance (what to expect or do next time), not just describe a single token swap unless that swap encodes a rule.
-- Prefer fewer, sharper insights over many shallow ones (aim for roughly 2–6 per chunk when the text supports it; at most 10; empty array if the chunks are nearly identical with nothing to teach).
-- Optional \`basis\`: one short line grounding the insight in what you saw (e.g. a phrase from source vs target). Do not paste large spans.
-- \`confidence\`: how well-supported your insights are by the visible chunk pair (0.0–1.0).
-- Return ONLY valid JSON matching the schema. No markdown or preamble.`;
+Regras:
+- Cada insight deve funcionar sozinho como orientação (o que esperar ou fazer da próxima vez), não só descrever uma troca isolada, salvo quando essa troca codifica uma regra.
+- Prefira menos insights e mais nítidos (cerca de 2–6 por trecho quando o texto permitir; no máximo 10; array vazio se os trechos forem quase idênticos e não houver o que ensinar).
+- \`basis\` (opcional): uma linha curta ancorando o insight no que você viu (ex.: trecho FONTE vs META). Não cole blocos longos.
+- \`confidence\`: quão bem os insights estão sustentados pelo par visível (0,0 a 1,0).
+- Devolva **somente** JSON válido conforme o schema. Sem markdown fora do JSON e sem preâmbulo.`;
 
-const SYNTHESIS_SYSTEM_PROMPT = `You are an expert linguistic analyst. You have been given **chunk-level insights** from comparing a source document to a target document across many aligned sections.
+const SYNTHESIS_SYSTEM_PROMPT = `Você é um analista linguístico. Recebeu **insights por trecho** ao comparar um documento-fonte a um documento-meta em várias seções alinhadas.
 
-Return a single JSON object with one field: **rulesMarkdown** — a complete Markdown document that will be pasted later as **instructions for another LLM** applying the same document pair’s conventions.
+Devolva um único objeto JSON com o campo **rulesMarkdown**: um documento Markdown completo que será colado depois como **instruções para outro modelo** reproduzir as convenções desse par de documentos.
 
-**Language (mandatory):** Write the **entire** \`rulesMarkdown\` document in **Brazilian Portuguese (pt-BR)** — all titles, section headings, bullets, explanations, and meta text. Use natural wording for Brazil (você / imperativo, terminologia comum em revisão e localização). You may keep **short quoted excerpts** from the source/target documents in their **original language** when they illustrate a rule; everything you add around them must still be in pt-BR.
+**Idioma (obrigatório):** Escreva o **documento inteiro** em **português do Brasil (pt-BR)** — títulos, seções, listas e explicações. Tom natural no Brasil (imperativo / “você” quando fizer sentido, vocabulário de revisão e localização). Pode manter **citações curtas** da FONTE ou da META no **idioma original** quando ilustrarem uma regra; todo o texto que você acrescentar ao redor deve estar em pt-BR.
 
-Requirements for **rulesMarkdown**:
-- Start with a level-1 title naming the document pair and purpose (e.g. regras de revisão / localização).
-- Use \`##\` sections for each major theme you infer from the insights.
-- Use **imperative**, testable bullets (what to do / what to avoid), not vague prose.
-- Where helpful, add short **sub-bullets** with concrete before→after or terminology guidance drawn from the insights.
-- Prefer depth over repetition; merge duplicate themes.
-- If any chunk had non-empty insights, the document must be **substantive** (not empty and not a single generic sentence).
-- If every chunk’s insights were empty, write a brief Markdown note in pt-BR that no rules could be inferred.`;
+Requisitos do **rulesMarkdown**:
+- Comece com título nível 1 com o par de documentos e o propósito (ex.: regras de revisão / localização).
+- Use seções \`##\` para cada tema importante inferido dos insights.
+- Use listas com **verbos no imperativo**, testáveis (o que fazer / o que evitar), evite vagueza.
+- Quando ajudar, subitens com orientação concreta (antes → depois ou terminologia) extraída dos insights.
+- Prefira profundidade a repetição; una temas duplicados.
+- Se houver insights não vazios em qualquer trecho, o documento deve ser **substancial** (não vazio nem uma frase genérica só).
+- Se todos os insights estiverem vazios, escreva em pt-BR uma nota Markdown breve de que não foi possível inferir regras.`;
 
 interface RawChunkResult {
   insights: Array<{ insight: string; basis?: string }>;
@@ -98,14 +95,20 @@ function formatChunkWindow(
   pair: ChunkPair | null,
   totalChunks: number,
 ): string {
+  const label =
+    role === 'PREVIOUS'
+      ? 'ANTERIOR'
+      : role === 'CURRENT'
+        ? 'ATUAL'
+        : 'SEGUINTE';
   if (!pair) {
     const edge =
       role === 'PREVIOUS'
-        ? 'start of document (no prior chunk)'
-        : 'end of document (no following chunk)';
-    return `--- ${role} (${edge}) ---\n(no text)\n`;
+        ? 'início do documento (sem trecho anterior)'
+        : 'fim do documento (sem trecho seguinte)';
+    return `--- ${label} (${edge}) ---\n(sem texto)\n`;
   }
-  return `--- ${role} — chunk ${pair.index + 1} of ${totalChunks} ---\nSOURCE:\n${pair.source.text}\n\nTARGET:\n${pair.target.text}\n`;
+  return `--- ${label} — trecho ${pair.index + 1} de ${totalChunks} ---\nFONTE:\n${pair.source.text}\n\nMETA:\n${pair.target.text}\n`;
 }
 
 export async function analyzeChunkPair(
@@ -126,7 +129,7 @@ export async function analyzeChunkPair(
   const prev = chunkIndex > 0 ? pairs[chunkIndex - 1] : null;
   const next = chunkIndex + 1 < pairs.length ? pairs[chunkIndex + 1] : null;
 
-  const userContent = `FOCUS CHUNK (for your insights): ${chunkIndex + 1} of ${totalChunks}
+  const userContent = `TRECHO EM FOCO (para seus insights): ${chunkIndex + 1} de ${totalChunks}
 
 ${formatChunkWindow('PREVIOUS', prev, totalChunks)}
 ${formatChunkWindow('CURRENT', pair, totalChunks)}
@@ -190,10 +193,10 @@ export async function synthesizePatterns(
     })),
   }));
 
-  const userContent = `Document pair: "${fileNames.a}" vs "${fileNames.b}"
-Total chunks analyzed: ${analyses.length}
+  const userContent = `Par de documentos: "${fileNames.a}" e "${fileNames.b}"
+Total de trechos analisados: ${analyses.length}
 
-Per-chunk insights (synthesize across these):
+Observações por trecho (sintetize entre todas):
 ${JSON.stringify(summary, null, 2)}`;
 
   const response = await anthropic.messages.create({

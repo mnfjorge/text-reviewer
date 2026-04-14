@@ -13,14 +13,14 @@ export default function ReviseLandingPage() {
   useEffect(() => {
     fetch('/api/learnings')
       .then(async (res) => {
-        if (!res.ok) throw new Error('Failed to load sessions');
+        if (!res.ok) throw new Error('Não foi possível carregar as sessões');
         return res.json() as Promise<LearningMeta[]>;
       })
       .then((data) =>
         setSessions([...data].sort((a, b) => b.createdAt.localeCompare(a.createdAt))),
       )
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : 'Unknown error'),
+        setError(err instanceof Error ? err.message : 'Erro desconhecido'),
       )
       .finally(() => setLoading(false));
   }, []);
@@ -28,9 +28,10 @@ export default function ReviseLandingPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Revise Text</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Revisar texto</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Pick a learning session — its patterns will be applied to your input text.
+          Escolha uma sessão de aprendizado — os padrões serão aplicados ao texto
+          que você enviar.
         </p>
       </div>
 
@@ -48,12 +49,13 @@ export default function ReviseLandingPage() {
 
       {!loading && !error && sessions.length === 0 && (
         <div className="text-center py-20 text-gray-400">
-          <p className="text-lg mb-2">No learning sessions yet</p>
+          <p className="text-lg mb-2">Ainda não há sessões de aprendizado</p>
           <p className="text-sm mb-4">
-            Run a document comparison first to build revision patterns.
+            Faça primeiro uma comparação de documentos para gerar padrões de
+            revisão.
           </p>
           <Link href="/" className="text-sm text-indigo-600 hover:underline">
-            Start a new analysis →
+            Iniciar uma nova análise →
           </Link>
         </div>
       )}
@@ -73,10 +75,10 @@ export default function ReviseLandingPage() {
                 {meta.fileA} → {meta.fileB}
               </p>
               <div className="mt-3 flex items-center gap-3 text-xs text-gray-400">
-                <span>{meta.chunkCount} chunks</span>
+                <span>{meta.chunkCount} trechos</span>
                 <span>·</span>
                 <span>
-                  {new Date(meta.createdAt).toLocaleDateString(undefined, {
+                  {new Date(meta.createdAt).toLocaleDateString('pt-BR', {
                     year: 'numeric',
                     month: 'short',
                     day: 'numeric',
@@ -84,7 +86,7 @@ export default function ReviseLandingPage() {
                 </span>
               </div>
               <div className="mt-3 text-xs font-medium text-indigo-600 group-hover:underline">
-                Use this session →
+                Usar esta sessão →
               </div>
             </Link>
           ))}
