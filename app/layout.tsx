@@ -33,12 +33,20 @@ export default function RootLayout({
             <a href="/" className="text-base font-semibold text-gray-900">
               Text Reviewer
             </a>
-            <a
-              href="/learnings"
-              className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
-            >
-              Learnings
-            </a>
+            <div className="flex items-center gap-5">
+              <a
+                href="/revise"
+                className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
+              >
+                Revise
+              </a>
+              <a
+                href="/learnings"
+                className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
+              >
+                Learnings
+              </a>
+            </div>
           </div>
         </nav>
         <main className="mx-auto max-w-5xl px-6 py-10">{children}</main>
