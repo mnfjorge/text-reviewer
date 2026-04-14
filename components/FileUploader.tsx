@@ -2,33 +2,67 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { upload } from '@vercel/blob/client';
+import { v4 as uuidv4 } from 'uuid';
 import { Button } from './ui/Button';
 import { Spinner } from './ui/Spinner';
 import type { AnalyzeRequest, AnalyzeStreamEvent, ParseResponse } from '@/lib/types';
 
-type Status = 'idle' | 'parsing' | 'analyzing' | 'done' | 'error';
+type Status = 'idle' | 'uploading' | 'parsing' | 'analyzing' | 'done' | 'error';
 
 const ACCEPTED = '.pdf,.doc,.docx,.txt';
+const MAX_MB = 100;
+const MAX_BYTES = MAX_MB * 1024 * 1024;
+
+/** Safe JSON extraction — handles platform-level text error responses (e.g. FUNCTION_PAYLOAD_TOO_LARGE) */
+async function safeJson<T>(res: Response): Promise<T> {
+  const contentType = res.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    const text = await res.text();
+    throw new Error(text.trim() || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`);
+  return data as T;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
 
 function DropZone({
   label,
   file,
+  uploadPct,
   onFile,
 }: {
   label: string;
   file: File | null;
+  uploadPct: number | null;
   onFile: (f: File) => void;
 }) {
   const [dragging, setDragging] = useState(false);
+
+  const handleFile = useCallback(
+    (f: File) => {
+      if (f.size > MAX_BYTES) {
+        alert(`File is too large (${formatBytes(f.size)}). Maximum size is ${MAX_MB} MB.`);
+        return;
+      }
+      onFile(f);
+    },
+    [onFile],
+  );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragging(false);
       const f = e.dataTransfer.files[0];
-      if (f) onFile(f);
+      if (f) handleFile(f);
     },
-    [onFile],
+    [handleFile],
   );
 
   return (
@@ -48,20 +82,34 @@ function DropZone({
         type="file"
         accept={ACCEPTED}
         className="absolute inset-0 cursor-pointer opacity-0"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
       />
       {file ? (
         <>
           <div className="mb-2 text-2xl">📄</div>
           <p className="text-sm font-medium text-gray-800 break-all">{file.name}</p>
-          <p className="mt-1 text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
-          <p className="mt-2 text-xs text-indigo-600">Click or drop to replace</p>
+          <p className="mt-1 text-xs text-gray-500">{formatBytes(file.size)}</p>
+          {uploadPct !== null && uploadPct < 100 ? (
+            <div className="mt-3 w-full">
+              <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                <div
+                  className="h-full bg-indigo-500 transition-all duration-200"
+                  style={{ width: `${uploadPct}%` }}
+                />
+              </div>
+              <p className="mt-1 text-xs text-indigo-600">{uploadPct}% uploaded</p>
+            </div>
+          ) : uploadPct === 100 ? (
+            <p className="mt-2 text-xs text-green-600">Uploaded</p>
+          ) : (
+            <p className="mt-2 text-xs text-indigo-600">Click or drop to replace</p>
+          )}
         </>
       ) : (
         <>
           <div className="mb-2 text-2xl">📁</div>
           <p className="text-sm font-semibold text-gray-700">{label}</p>
-          <p className="mt-1 text-xs text-gray-500">PDF, DOCX, DOC, or TXT · max 10 MB</p>
+          <p className="mt-1 text-xs text-gray-500">PDF, DOCX, DOC, or TXT · max {MAX_MB} MB</p>
           <p className="mt-3 text-xs text-indigo-600">Click or drag & drop</p>
         </>
       )}
@@ -73,6 +121,8 @@ export function FileUploader() {
   const router = useRouter();
   const [fileA, setFileA] = useState<File | null>(null);
   const [fileB, setFileB] = useState<File | null>(null);
+  const [uploadPctA, setUploadPctA] = useState<number | null>(null);
+  const [uploadPctB, setUploadPctB] = useState<number | null>(null);
   const [status, setStatus] = useState<Status>('idle');
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
@@ -81,23 +131,43 @@ export function FileUploader() {
 
   async function handleSubmit() {
     if (!fileA || !fileB) return;
-    setStatus('parsing');
+    setStatus('uploading');
     setError(null);
+    setUploadPctA(0);
+    setUploadPctB(0);
 
     try {
-      // Step 1: parse files
-      const form = new FormData();
-      form.append('fileA', fileA);
-      form.append('fileB', fileB);
+      // Step 1: Upload both files directly to Vercel Blob (bypasses function payload limit)
+      const sessionPrefix = `temp/${uuidv4()}`;
 
-      const parseRes = await fetch('/api/parse', { method: 'POST', body: form });
-      if (!parseRes.ok) {
-        const { error: msg } = await parseRes.json();
-        throw new Error(msg ?? 'Parsing failed');
-      }
-      const parsed: ParseResponse = await parseRes.json();
+      const [blobA, blobB] = await Promise.all([
+        upload(`${sessionPrefix}/${fileA.name}`, fileA, {
+          access: 'public',
+          handleUploadUrl: '/api/upload',
+          onUploadProgress: ({ percentage }) => setUploadPctA(Math.round(percentage)),
+        }),
+        upload(`${sessionPrefix}/${fileB.name}`, fileB, {
+          access: 'public',
+          handleUploadUrl: '/api/upload',
+          onUploadProgress: ({ percentage }) => setUploadPctB(Math.round(percentage)),
+        }),
+      ]);
 
-      // Step 2: analyze with SSE streaming
+      // Step 2: Parse files (server downloads from blob URLs, no payload size limit)
+      setStatus('parsing');
+
+      const parseRes = await fetch('/api/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileA: { url: blobA.url, name: fileA.name, size: fileA.size },
+          fileB: { url: blobB.url, name: fileB.name, size: fileB.size },
+        }),
+      });
+
+      const parsed = await safeJson<ParseResponse>(parseRes);
+
+      // Step 3: Analyze with SSE streaming
       setStatus('analyzing');
       setProgress({ current: 0, total: parsed.pairs.length });
 
@@ -115,7 +185,8 @@ export function FileUploader() {
       });
 
       if (!analyzeRes.ok || !analyzeRes.body) {
-        throw new Error('Analysis request failed');
+        const text = await analyzeRes.text().catch(() => '');
+        throw new Error(text || 'Analysis request failed');
       }
 
       const reader = analyzeRes.body.getReader();
@@ -154,11 +225,30 @@ export function FileUploader() {
     }
   }
 
+  const statusLabel: Record<Status, string> = {
+    idle: 'Analyze documents',
+    uploading: 'Uploading…',
+    parsing: 'Parsing files…',
+    analyzing: 'Analyzing…',
+    done: 'Done!',
+    error: 'Try again',
+  };
+
   return (
     <div className="w-full max-w-3xl mx-auto">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <DropZone label="File A — Original" file={fileA} onFile={setFileA} />
-        <DropZone label="File B — Reviewed / Translated" file={fileB} onFile={setFileB} />
+        <DropZone
+          label="File A — Original"
+          file={fileA}
+          uploadPct={uploadPctA}
+          onFile={(f) => { setFileA(f); setUploadPctA(null); }}
+        />
+        <DropZone
+          label="File B — Reviewed / Translated"
+          file={fileB}
+          uploadPct={uploadPctB}
+          onFile={(f) => { setFileB(f); setUploadPctB(null); }}
+        />
       </div>
 
       {status === 'analyzing' && progress.total > 0 && (
@@ -184,20 +274,15 @@ export function FileUploader() {
 
       <div className="mt-6 flex items-center gap-3">
         <Button onClick={handleSubmit} disabled={!canSubmit}>
-          {status === 'parsing' && <Spinner size="sm" />}
-          {status === 'analyzing' && <Spinner size="sm" />}
-          <span className="ml-2">
-            {status === 'idle' && 'Analyze documents'}
-            {status === 'parsing' && 'Parsing files…'}
-            {status === 'analyzing' && 'Analyzing…'}
-            {status === 'done' && 'Done!'}
-            {status === 'error' && 'Try again'}
-          </span>
+          {(status === 'uploading' || status === 'parsing' || status === 'analyzing') && (
+            <Spinner size="sm" />
+          )}
+          <span className="ml-2">{statusLabel[status]}</span>
         </Button>
         {status === 'error' && (
           <button
             className="text-sm text-gray-500 hover:text-gray-700"
-            onClick={() => setStatus('idle')}
+            onClick={() => { setStatus('idle'); setUploadPctA(null); setUploadPctB(null); }}
           >
             Reset
           </button>

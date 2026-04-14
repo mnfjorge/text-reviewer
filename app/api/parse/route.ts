@@ -1,40 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
+import { del } from '@vercel/blob';
 import { parseFile, isSupportedFile } from '@/lib/parsers';
 import { chunkText, alignChunkPairs } from '@/lib/chunker';
 import type { ParseResponse } from '@/lib/types';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 120;
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+
+interface ParseRequestBody {
+  fileA: { url: string; name: string; size: number };
+  fileB: { url: string; name: string; size: number };
+}
+
+async function fetchBlob(url: string): Promise<Buffer> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch uploaded file: ${res.statusText}`);
+  return Buffer.from(await res.arrayBuffer());
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  let formData: FormData;
+  let body: ParseRequestBody;
   try {
-    formData = await request.formData();
+    body = (await request.json()) as ParseRequestBody;
   } catch {
-    return NextResponse.json({ error: 'Invalid form data' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const fileA = formData.get('fileA');
-  const fileB = formData.get('fileB');
+  const { fileA, fileB } = body;
 
-  if (!(fileA instanceof File) || !(fileB instanceof File)) {
-    return NextResponse.json(
-      { error: 'Both fileA and fileB are required' },
-      { status: 400 },
-    );
+  if (!fileA?.url || !fileB?.url) {
+    return NextResponse.json({ error: 'Both fileA and fileB are required' }, { status: 400 });
   }
 
-  for (const [label, file] of [['fileA', fileA], ['fileB', fileB]] as const) {
+  for (const [label, file] of [['fileA', fileA], ['fileB', fileB]] as [string, typeof fileA][]) {
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: `${label} exceeds the 10 MB limit` },
+        { error: `${label} exceeds the 100 MB limit` },
         { status: 400 },
       );
     }
-    if (!isSupportedFile(file.name, file.type)) {
+    if (!isSupportedFile(file.name, 'application/octet-stream')) {
       return NextResponse.json(
         { error: `${label} (${file.name}) is not a supported file type. Use PDF, DOCX, or TXT.` },
         { status: 400 },
@@ -44,13 +52,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const [bufA, bufB] = await Promise.all([
-      fileA.arrayBuffer().then((ab) => Buffer.from(ab)),
-      fileB.arrayBuffer().then((ab) => Buffer.from(ab)),
+      fetchBlob(fileA.url),
+      fetchBlob(fileB.url),
     ]);
 
     const [textA, textB] = await Promise.all([
-      parseFile(bufA, fileA.type, fileA.name),
-      parseFile(bufB, fileB.type, fileB.name),
+      parseFile(bufA, '', fileA.name),
+      parseFile(bufB, '', fileB.name),
     ]);
 
     const chunksA = chunkText(textA);
@@ -65,6 +73,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       fileB: { name: fileB.name, size: fileB.size, chunkCount: chunksB.length },
       pairs,
     };
+
+    // Clean up temp blobs in the background — don't await so we don't delay the response
+    Promise.all([del(fileA.url), del(fileB.url)]).catch(() => {
+      // Best-effort cleanup; non-fatal
+    });
 
     return NextResponse.json(response);
   } catch (err) {
