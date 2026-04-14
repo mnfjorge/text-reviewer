@@ -114,7 +114,7 @@ export default function ReviewPage() {
           })}
         </div>
         <p className="mt-3 text-xs text-gray-400 text-center">
-          Expand each chunk to see source/target text and detailed change breakdown
+          Expand each chunk to see source/target text and model insights
         </p>
       </section>
     </div>

@@ -3,9 +3,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { upload } from '@vercel/blob/client';
-import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Spinner } from './ui/Spinner';
+import {
+  limitPairsForAnalysis,
+  MAX_ANALYSIS_CHUNKS,
+} from '@/lib/analyze-constants';
 import type {
   AnalyzeRequest,
   AnalyzeStreamEvent,
@@ -14,18 +17,6 @@ import type {
   ParseResponse,
   SessionPipelineState,
 } from '@/lib/types';
-
-const changeTypeColor: Record<
-  string,
-  'green' | 'red' | 'yellow' | 'blue' | 'purple' | 'orange'
-> = {
-  addition: 'green',
-  deletion: 'red',
-  substitution: 'yellow',
-  reorder: 'blue',
-  style: 'purple',
-  tone: 'orange',
-};
 
 type Status = 'idle' | 'uploading' | 'parsing' | 'analyzing' | 'done' | 'error';
 
@@ -227,7 +218,12 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
 
           const event: AnalyzeStreamEvent = JSON.parse(json);
 
-          if (event.type === 'chunk_complete') {
+          if (event.type === 'chunk_start') {
+            setProgress({
+              current: event.chunkIndex,
+              total: event.total,
+            });
+          } else if (event.type === 'chunk_complete') {
             setProgress((p) => ({ ...p, current: event.chunkIndex + 1 }));
             setStreamingAnalyses((prev) => [...prev, event.analysis]);
           } else if (event.type === 'synthesis') {
@@ -248,19 +244,21 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
   const runAnalyze = useCallback(
     async (parsed: ParseResponse, existing: ChunkAnalysis[] = []) => {
       setStatus('analyzing');
+      const pairsCapped = limitPairsForAnalysis(parsed.pairs);
+      const existingCapped = existing.slice(0, MAX_ANALYSIS_CHUNKS);
       setProgress({
-        current: existing.length,
-        total: parsed.pairs.length,
+        current: existingCapped.length,
+        total: pairsCapped.length,
       });
-      setStreamingAnalyses([...existing]);
+      setStreamingAnalyses([...existingCapped]);
       setStreamingSynthesis(null);
 
       const analyzeBody: AnalyzeRequest = {
         sessionId: parsed.sessionId,
-        pairs: parsed.pairs,
+        pairs: pairsCapped,
         fileA: { name: parsed.fileA.name, size: parsed.fileA.size },
         fileB: { name: parsed.fileB.name, size: parsed.fileB.size },
-        existingAnalyses: existing.length ? existing : undefined,
+        existingAnalyses: existingCapped.length ? existingCapped : undefined,
       };
 
       const analyzeRes = await fetch('/api/analyze', {
@@ -588,30 +586,22 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
                     confidence {(analysis.confidence * 100).toFixed(0)}%
                   </span>
                 </div>
-                {analysis.patterns.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-3">
-                    {analysis.patterns.map((p) => (
-                      <Badge key={p} label={p} color="indigo" />
-                    ))}
-                  </div>
-                )}
-                {analysis.changes.length > 0 && (
+                {analysis.insights.length > 0 && (
                   <div className="space-y-2 mb-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                      Changes
+                      Insights
                     </p>
-                    {analysis.changes.map((change, j) => (
+                    {analysis.insights.map((row, j) => (
                       <div
                         key={j}
-                        className="rounded border border-gray-200 bg-white p-2 text-xs"
+                        className="rounded border border-gray-200 bg-white p-2 text-xs text-gray-700"
                       >
-                        <Badge
-                          label={change.type}
-                          color={changeTypeColor[change.type] ?? 'gray'}
-                        />
-                        <p className="text-gray-600 mt-1">
-                          {change.explanation}
-                        </p>
+                        <p className="leading-relaxed">{row.insight}</p>
+                        {row.basis && (
+                          <p className="text-gray-500 mt-1.5 italic border-t border-gray-100 pt-1.5">
+                            {row.basis}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>

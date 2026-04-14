@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { get } from '@vercel/blob';
 import { parseFile, isSupportedFile } from '@/lib/parsers';
-import { buildChunkPairsForParse } from '@/lib/outline-align';
+import { alignChunkPairs, chunkText } from '@/lib/chunker';
 import { getSessionPipelineState, putSessionPipelineState } from '@/lib/blob';
 import type { ParseResponse } from '@/lib/types';
 
@@ -68,8 +68,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       parseFile(bufB, '', fileB.name),
     ]);
 
-    const pairs = await buildChunkPairsForParse(textA, textB);
-    const chunkCount = pairs.length;
+    const chunksA = chunkText(textA);
+    const chunksB = chunkText(textB);
+    const pairs = alignChunkPairs(chunksA, chunksB);
 
     const prev = await getSessionPipelineState(sessionId);
     const createdAt = prev?.createdAt ?? new Date().toISOString();
@@ -86,8 +87,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const response: ParseResponse = {
       sessionId,
-      fileA: { name: fileA.name, size: fileA.size, chunkCount },
-      fileB: { name: fileB.name, size: fileB.size, chunkCount },
+      fileA: { name: fileA.name, size: fileA.size, chunkCount: chunksA.length },
+      fileB: { name: fileB.name, size: fileB.size, chunkCount: chunksB.length },
       pairs,
     };
 

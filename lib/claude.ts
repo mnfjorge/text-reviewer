@@ -8,53 +8,39 @@ const anthropic = new Anthropic({
 const MODEL = 'claude-sonnet-4-6';
 
 const CHUNK_SYSTEM_PROMPT = `You are an expert linguistic analyst specializing in document comparison.
-Your task is to analyze a pair of text chunks — a SOURCE chunk and a TARGET chunk — which are corresponding sections from two versions of the same document. The document pair may represent: an original and its translation, an original and a reviewed/edited version, or a source and a localized adaptation.
+For each request you see **three windows** of aligned text: optional PREVIOUS chunk pair, **CURRENT** chunk pair, optional NEXT chunk pair. Each window has SOURCE and TARGET for the same stretch of the document.
 
-Your analysis must be precise, evidence-based, and grounded only in what you observe in the text. Do not speculate beyond the evidence.
+The pipeline may mis-align slightly at chunk boundaries. Use PREVIOUS and NEXT **only as context**—to see how sentences continue, fix skew, or spot rules that span a boundary. Your JSON response must still reflect insights for the **CURRENT** pair: prioritize observations grounded in the CURRENT SOURCE vs CURRENT TARGET. Mention neighbors in a \`basis\` line only when that context is essential.
 
-You will return a JSON object with this exact structure:
-{
-  "changes": [
-    {
-      "type": "<addition|deletion|substitution|reorder|style|tone>",
-      "sourceFragment": "<exact excerpt from source, or empty string for additions>",
-      "targetFragment": "<exact excerpt from target, or empty string for deletions>",
-      "explanation": "<concise explanation of why this change was made>"
-    }
-  ],
-  "patterns": [
-    "<high-level pattern name, e.g. 'passive-to-active voice', 'formality reduction'>"
-  ],
-  "confidence": <0.0-1.0>
-}
+Your job is NOT to list every edit or micro-diff. Instead, produce **insights**: concise, reusable reasoning a human reviewer would want to remember—conventions, equivalences, tone or register choices, cultural adaptation, terminology policy, and *why* the target reads as it does relative to the source.
+
+Good insight examples (illustrative):
+- "In this Portuguese text, honorific 'Sri' is rendered as 'Senhor' before names; expect Sri → Senhor for the same devotional register."
+- "The target uses sentence case for section headings while the source used title case; carry that style forward."
+- "Technical acronym X is expanded on first use in the target only; follow that pattern for consistency."
 
 Rules:
-- sourceFragment and targetFragment should be short (≤30 words) representative excerpts, not the entire chunk.
-- patterns should capture recurring transformation rules visible in this chunk.
-- confidence reflects how clearly the changes map between source and target.
-- Return ONLY valid JSON. No markdown, no preamble, no explanation outside the JSON.`;
+- Each insight should stand alone as guidance (what to expect or do next time), not just describe a single token swap unless that swap encodes a rule.
+- Prefer fewer, sharper insights over many shallow ones (aim for roughly 2–6 per chunk when the text supports it; at most 10; empty array if the chunks are nearly identical with nothing to teach).
+- Optional \`basis\`: one short line grounding the insight in what you saw (e.g. a phrase from source vs target). Do not paste large spans.
+- \`confidence\`: how well-supported your insights are by the visible chunk pair (0.0–1.0).
+- Return ONLY valid JSON matching the schema. No markdown or preamble.`;
 
-const SYNTHESIS_SYSTEM_PROMPT = `You are an expert linguistic analyst. You have been given a summary of chunk-level analyses from a document comparison session.
+const SYNTHESIS_SYSTEM_PROMPT = `You are an expert linguistic analyst. You have been given **chunk-level insights** from comparing a source document to a target document across many aligned sections.
 
-Your task is to synthesize these into 3-8 high-level, recurring transformation patterns that characterize how the source document was changed to produce the target document.
+Your task is to synthesize **high-level, recurring themes** as \`globalPatterns\`. Each should generalize what reviewers learned across chunks—not restate one chunk. Focus on patterns that repeat or clearly generalize; skip one-off trivia. Skip already standardized linguistics and formatting rules.
 
-Put them in the response field \`globalPatterns\`. Each entry must have:
-- patternType: short pattern name (e.g. 'passive-to-active voice')
-- description: when the pattern applies
-- exampleCount: how often you observed it across chunks
-- examples: short { source, target } pairs (≤20 words each)
+Each global pattern must have:
+- patternType: short name (e.g. 'Honorific localization')
+- description: when it applies and what to do
+- exampleCount: approximate how many chunks reflected this (estimate if needed)
+- examples: 1–3 short { source, target } illustrations (≤20 words each), drawn or paraphrased from the insight material
 
 Rules:
-- Focus on patterns that repeat across multiple chunks, not one-off edits.`;
+- Focus on patterns that repeat or clearly generalize; skip one-off trivia.`;
 
 interface RawChunkResult {
-  changes: Array<{
-    type: string;
-    sourceFragment: string;
-    targetFragment: string;
-    explanation: string;
-  }>;
-  patterns: string[];
+  insights: Array<{ insight: string; basis?: string }>;
   confidence: number;
 }
 
@@ -62,37 +48,21 @@ interface RawChunkResult {
 const CHUNK_OUTPUT_SCHEMA: Record<string, unknown> = {
   type: 'object',
   properties: {
-    changes: {
+    insights: {
       type: 'array',
       items: {
         type: 'object',
         properties: {
-          type: {
-            type: 'string',
-            enum: [
-              'addition',
-              'deletion',
-              'substitution',
-              'reorder',
-              'style',
-              'tone',
-            ],
-          },
-          sourceFragment: { type: 'string' },
-          targetFragment: { type: 'string' },
-          explanation: { type: 'string' },
+          insight: { type: 'string' },
+          basis: { type: 'string' },
         },
-        required: ['type', 'sourceFragment', 'targetFragment', 'explanation'],
+        required: ['insight'],
         additionalProperties: false,
       },
     },
-    patterns: {
-      type: 'array',
-      items: { type: 'string' },
-    },
     confidence: { type: 'number' },
   },
-  required: ['changes', 'patterns', 'confidence'],
+  required: ['insights', 'confidence'],
   additionalProperties: false,
 };
 
@@ -136,21 +106,48 @@ interface RawSynthesisResult {
   globalPatterns: GlobalPattern[];
 }
 
-export async function analyzeChunkPair(
-  pair: ChunkPair,
+function formatChunkWindow(
+  role: 'PREVIOUS' | 'CURRENT' | 'NEXT',
+  pair: ChunkPair | null,
   totalChunks: number,
+): string {
+  if (!pair) {
+    const edge =
+      role === 'PREVIOUS'
+        ? 'start of document (no prior chunk)'
+        : 'end of document (no following chunk)';
+    return `--- ${role} (${edge}) ---\n(no text)\n`;
+  }
+  return `--- ${role} — chunk ${pair.index + 1} of ${totalChunks} ---\nSOURCE:\n${pair.source.text}\n\nTARGET:\n${pair.target.text}\n`;
+}
+
+export async function analyzeChunkPair(
+  pairs: ChunkPair[],
+  chunkIndex: number,
 ): Promise<ChunkAnalysis> {
-  const userContent = `CHUNK INDEX: ${pair.index + 1} of ${totalChunks}
+  const totalChunks = pairs.length;
+  const pair = pairs[chunkIndex];
+  if (!pair) {
+    return {
+      chunkIndex,
+      insights: [],
+      confidence: 0,
+      rawResponse: '',
+    };
+  }
 
-SOURCE:
-${pair.source.text}
+  const prev = chunkIndex > 0 ? pairs[chunkIndex - 1] : null;
+  const next = chunkIndex + 1 < pairs.length ? pairs[chunkIndex + 1] : null;
 
-TARGET:
-${pair.target.text}`;
+  const userContent = `FOCUS CHUNK (for your insights): ${chunkIndex + 1} of ${totalChunks}
+
+${formatChunkWindow('PREVIOUS', prev, totalChunks)}
+${formatChunkWindow('CURRENT', pair, totalChunks)}
+${formatChunkWindow('NEXT', next, totalChunks)}`;
 
   const response = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: 2048,
     system: [
       {
         type: 'text',
@@ -170,28 +167,24 @@ ${pair.target.text}`;
   const rawText =
     response.content[0].type === 'text' ? response.content[0].text : '';
 
-  let parsed: RawChunkResult = { changes: [], patterns: [], confidence: 0.5 };
+  let parsed: RawChunkResult = { insights: [], confidence: 0.5 };
   try {
     parsed = JSON.parse(rawText) as RawChunkResult;
   } catch {
     // If JSON parse fails, return minimal analysis
   }
 
-  const validChangeTypes = new Set([
-    'addition', 'deletion', 'substitution', 'reorder', 'style', 'tone',
-  ]);
+  const insights = (parsed.insights ?? [])
+    .map((row) => ({
+      insight: (row.insight ?? '').trim(),
+      basis: row.basis?.trim() || undefined,
+    }))
+    .filter((row) => row.insight.length > 0)
+    .slice(0, 10);
 
   return {
-    chunkIndex: pair.index,
-    changes: (parsed.changes ?? []).map((c) => ({
-      type: validChangeTypes.has(c.type)
-        ? (c.type as ChunkAnalysis['changes'][0]['type'])
-        : 'substitution',
-      sourceFragment: c.sourceFragment ?? '',
-      targetFragment: c.targetFragment ?? '',
-      explanation: c.explanation ?? '',
-    })),
-    patterns: parsed.patterns ?? [],
+    chunkIndex,
+    insights,
     confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
     rawResponse: rawText,
   };
@@ -203,18 +196,17 @@ export async function synthesizePatterns(
 ): Promise<GlobalPattern[]> {
   const summary = analyses.map((a) => ({
     chunkIndex: a.chunkIndex,
-    patterns: a.patterns,
-    changeTypes: a.changes.map((c) => c.type),
-    sampleChanges: a.changes.slice(0, 3).map((c) => ({
-      sourceFragment: c.sourceFragment,
-      targetFragment: c.targetFragment,
+    confidence: a.confidence,
+    insights: a.insights.map((i) => ({
+      insight: i.insight,
+      basis: i.basis,
     })),
   }));
 
   const userContent = `Document pair: "${fileNames.a}" vs "${fileNames.b}"
 Total chunks analyzed: ${analyses.length}
 
-Per-chunk pattern summary:
+Per-chunk insights (synthesize across these):
 ${JSON.stringify(summary, null, 2)}`;
 
   const response = await anthropic.messages.create({

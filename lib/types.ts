@@ -14,17 +14,17 @@ export interface ChunkPair {
 
 // ---- Claude Analysis ----
 
-export interface ChangeItem {
-  type: 'addition' | 'deletion' | 'substitution' | 'reorder' | 'style' | 'tone';
-  sourceFragment: string;
-  targetFragment: string;
-  explanation: string;
+/** One transferable observation from comparing a chunk pair (not a granular diff). */
+export interface ChunkInsight {
+  /** Reasoning the reviewer should carry forward, e.g. naming or localization conventions. */
+  insight: string;
+  /** Optional one-line anchor from the chunks (not an exhaustive list of edits). */
+  basis?: string;
 }
 
 export interface ChunkAnalysis {
   chunkIndex: number;
-  changes: ChangeItem[];
-  patterns: string[];
+  insights: ChunkInsight[];
   confidence: number;
   rawResponse: string;
 }

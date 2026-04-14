@@ -6,6 +6,10 @@ import {
   saveLearningSession,
 } from '@/lib/blob';
 import { learningSessionFromPipeline } from '@/lib/learning-from-pipeline';
+import {
+  limitPairsForAnalysis,
+  MAX_ANALYSIS_CHUNKS,
+} from '@/lib/analyze-constants';
 import type {
   AnalyzeRequest,
   AnalyzeStreamEvent,
@@ -35,6 +39,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     return new Response('sessionId and pairs are required', { status: 400 });
   }
 
+  const pairsLimited = limitPairsForAnalysis(pairs);
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -43,8 +49,8 @@ export async function POST(request: NextRequest): Promise<Response> {
         controller.enqueue(encoder.encode(sseEvent(event)));
       };
 
-      const existing = existingAnalyses ?? [];
-      if (existing.length > pairs.length) {
+      const existing = (existingAnalyses ?? []).slice(0, MAX_ANALYSIS_CHUNKS);
+      if (existing.length > pairsLimited.length) {
         send({ type: 'error', message: 'existingAnalyses longer than pairs' });
         controller.close();
         return;
@@ -76,17 +82,21 @@ export async function POST(request: NextRequest): Promise<Response> {
             `${fileAMerged.name} vs ${fileBMerged.name}`,
           fileA: fileAMerged,
           fileB: fileBMerged,
-          pairs,
+          pairs: pairsLimited,
           analyses,
         };
 
         await putSessionPipelineState(baseState);
 
-        for (let i = existing.length; i < pairs.length; i++) {
-          const pair = pairs[i];
-          send({ type: 'chunk_start', chunkIndex: i, total: pairs.length });
+        for (let i = existing.length; i < pairsLimited.length; i++) {
+          const pair = pairsLimited[i];
+          send({
+            type: 'chunk_start',
+            chunkIndex: i,
+            total: pairsLimited.length,
+          });
 
-          const analysis = await analyzeChunkPair(pair, pairs.length);
+          const analysis = await analyzeChunkPair(pairsLimited, i);
           analyses.push(analysis);
 
           await putSessionPipelineState({
