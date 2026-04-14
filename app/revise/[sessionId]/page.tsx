@@ -5,8 +5,10 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
+import { Badge } from '@/components/ui/Badge';
 import { MarkdownBody } from '@/components/MarkdownBody';
 import type { LearningSession } from '@/lib/types';
+import type { ConversationMessage } from '@/lib/revise';
 
 type RevisionState = 'idle' | 'loading' | 'streaming' | 'done' | 'error';
 
@@ -19,14 +21,21 @@ export default function ReviseSessionPage() {
 
   const [patternsOpen, setPatternsOpen] = useState(false);
 
+  // Revision state
   const [inputText, setInputText] = useState('');
   const [outputText, setOutputText] = useState('');
+  const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [revisionState, setRevisionState] = useState<RevisionState>('idle');
   const [revisionError, setRevisionError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Feedback state
+  const [feedback, setFeedback] = useState('');
+  const [feedbackRound, setFeedbackRound] = useState(0);
+
   const abortRef = useRef<AbortController | null>(null);
   const outputRef = useRef<HTMLDivElement>(null);
+  const feedbackRef = useRef<HTMLTextAreaElement>(null);
 
   // Load the learning session
   useEffect(() => {
@@ -44,16 +53,25 @@ export default function ReviseSessionPage() {
       .finally(() => setSessionLoading(false));
   }, [sessionId]);
 
-  // Auto-scroll output as text streams in
+  // Auto-scroll output while streaming
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [outputText]);
 
-  async function handleRevise() {
-    if (!inputText.trim() || revisionState === 'streaming') return;
+  // Focus the feedback textarea when a revision completes
+  useEffect(() => {
+    if (revisionState === 'done' && outputText) {
+      setTimeout(() => feedbackRef.current?.focus(), 50);
+    }
+  }, [revisionState, outputText]);
 
+  /**
+   * Shared streaming runner. Sends `msgs` to the API, streams the response
+   * into outputText, then commits the assistant reply to the messages history.
+   */
+  async function runStream(msgs: ConversationMessage[]) {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -62,11 +80,13 @@ export default function ReviseSessionPage() {
     setRevisionError(null);
     setRevisionState('loading');
 
+    let accumulated = '';
+
     try {
       const res = await fetch(`/api/revise/${sessionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: inputText }),
+        body: JSON.stringify({ messages: msgs }),
         signal: controller.signal,
       });
 
@@ -85,15 +105,53 @@ export default function ReviseSessionPage() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        setOutputText((prev) => prev + decoder.decode(value, { stream: true }));
+        const chunk = decoder.decode(value, { stream: true });
+        accumulated += chunk;
+        setOutputText((prev) => prev + chunk);
       }
 
+      // Commit the full conversation including the assistant reply
+      setMessages([...msgs, { role: 'assistant', content: accumulated }]);
       setRevisionState('done');
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Save partial output so feedback can still reference it
+        if (accumulated) {
+          setMessages([...msgs, { role: 'assistant', content: accumulated }]);
+        }
+        return;
+      }
       setRevisionError(err instanceof Error ? err.message : 'Falha na revisão');
       setRevisionState('error');
     }
+  }
+
+  async function handleRevise() {
+    if (!inputText.trim() || revisionState === 'streaming' || revisionState === 'loading') return;
+
+    setFeedbackRound(0);
+    setFeedback('');
+
+    const msgs: ConversationMessage[] = [
+      { role: 'user', content: `Revise o texto a seguir conforme as regras acima:\n\n${inputText.trim()}` },
+    ];
+    setMessages(msgs);
+    await runStream(msgs);
+  }
+
+  async function handleFeedback() {
+    if (!feedback.trim() || revisionState !== 'done' || !outputText) return;
+
+    const updatedMsgs: ConversationMessage[] = [
+      ...messages,
+      {
+        role: 'user',
+        content: `Refine o texto revisado com base neste feedback:\n\n${feedback.trim()}`,
+      },
+    ];
+    setFeedback('');
+    setFeedbackRound((r) => r + 1);
+    await runStream(updatedMsgs);
   }
 
   async function handleCopy() {
@@ -107,12 +165,11 @@ export default function ReviseSessionPage() {
     setRevisionState('done');
   }
 
-  const canRevise =
-    inputText.trim().length > 0 &&
-    revisionState !== 'streaming' &&
-    revisionState !== 'loading';
+  const isBusy = revisionState === 'loading' || revisionState === 'streaming';
+  const canRevise = inputText.trim().length > 0 && !isBusy;
+  const canApplyFeedback = feedback.trim().length > 0 && revisionState === 'done' && outputText.length > 0;
 
-  // ---------- Loading / error states ----------
+  // ---- Loading / error ----
 
   if (sessionLoading) {
     return (
@@ -133,7 +190,9 @@ export default function ReviseSessionPage() {
     );
   }
 
-  // ---------- Main UI ----------
+  // ---- Main UI ----
+
+  const showFeedback = (revisionState === 'done' || (isBusy && feedbackRound > 0)) && outputText.length > 0;
 
   return (
     <div className="space-y-6">
@@ -202,22 +261,18 @@ export default function ReviseSessionPage() {
               {inputText.trim().split(/\s+/).filter(Boolean).length} palavras
             </span>
             <div className="flex gap-2">
-              {(revisionState === 'streaming' || revisionState === 'loading') && (
+              {isBusy && (
                 <Button variant="secondary" size="sm" onClick={handleStop}>
                   Parar
                 </Button>
               )}
-              <Button
-                size="sm"
-                onClick={handleRevise}
-                disabled={!canRevise}
-              >
+              <Button size="sm" onClick={handleRevise} disabled={!canRevise}>
                 {revisionState === 'loading' ? (
                   <>
                     <Spinner size="sm" />
                     <span className="ml-2">Conectando…</span>
                   </>
-                ) : revisionState === 'streaming' ? (
+                ) : revisionState === 'streaming' && feedbackRound === 0 ? (
                   <>
                     <Spinner size="sm" />
                     <span className="ml-2">Revisando…</span>
@@ -233,7 +288,12 @@ export default function ReviseSessionPage() {
         {/* Output */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-gray-700">Texto revisado</label>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Texto revisado</label>
+              {feedbackRound > 0 && (
+                <Badge label={`refinado ×${feedbackRound}`} color="indigo" />
+              )}
+            </div>
             {outputText && (
               <button
                 type="button"
@@ -277,6 +337,58 @@ export default function ReviseSessionPage() {
           )}
         </div>
       </div>
+
+      {/* Feedback section — appears after the first revision lands */}
+      {showFeedback && (
+        <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-medium text-gray-800">Refinar com feedback</h2>
+            {feedbackRound > 0 && (
+              <Badge label={`rodada ${feedbackRound + 1}`} color="gray" />
+            )}
+          </div>
+          <p className="text-xs text-gray-500">
+            Descreva o que mudar — o Claude reaplicará as regras aprendidas respeitando
+            suas instruções.
+          </p>
+          <textarea
+            ref={feedbackRef}
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && canApplyFeedback) {
+                e.preventDefault();
+                handleFeedback();
+              }
+            }}
+            placeholder={
+              feedbackRound === 0
+                ? 'Ex.: "Mantenha as perguntas retóricas. O segundo parágrafo ainda está muito formal."'
+                : 'Ex.: "Bom, mas encurte a última frase e use a voz ativa em todo o texto."'
+            }
+            rows={3}
+            disabled={isBusy}
+            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none disabled:opacity-50"
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-400">⌘ Enter para aplicar</span>
+            <Button
+              size="sm"
+              onClick={handleFeedback}
+              disabled={!canApplyFeedback}
+            >
+              {isBusy && feedbackRound > 0 ? (
+                <>
+                  <Spinner size="sm" />
+                  <span className="ml-2">Refinando…</span>
+                </>
+              ) : (
+                'Aplicar feedback'
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

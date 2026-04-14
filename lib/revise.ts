@@ -4,6 +4,11 @@ import type { LearningSession } from './types';
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = 'claude-sonnet-4-6';
 
+export interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 function buildRevisionSystemPrompt(session: LearningSession): string {
   const md = session.rulesMarkdown?.trim() ?? '';
 
@@ -22,6 +27,7 @@ ${md}
 
 Sua tarefa:
 - Aplique essas convenções com fidelidade e consistência ao revisar o texto enviado pelo usuário.
+- Quando o usuário fornecer feedback sobre uma revisão anterior, incorpore esse feedback respeitando as convenções acima.
 - Preserve o sentido original e não acrescente informações novas.
 - Mantenha o **idioma do texto de entrada** na resposta (revise no mesmo idioma em que o usuário escreveu).
 - Devolva **somente** o texto revisado — sem comentários, explicações ou preâmbulo.
@@ -29,10 +35,13 @@ Sua tarefa:
 }
 
 /**
- * Transmite em fluxo uma versão revisada de `text` usando as regras aprendidas em `session`.
+ * Transmite em fluxo uma revisão usando o histórico completo da conversa.
+ * A primeira mensagem do usuário deve conter o texto a revisar.
+ * As mensagens seguintes carregam saídas anteriores do assistente + feedback do usuário
+ * para refinamento iterativo.
  */
 export async function streamRevision(
-  text: string,
+  messages: ConversationMessage[],
   session: LearningSession,
 ): Promise<ReadableStream<Uint8Array>> {
   const systemPrompt = buildRevisionSystemPrompt(session);
@@ -48,12 +57,7 @@ export async function streamRevision(
         cache_control: { type: 'ephemeral' },
       },
     ],
-    messages: [
-      {
-        role: 'user',
-        content: `Revise o texto a seguir conforme as regras acima:\n\n${text}`,
-      },
-    ],
+    messages,
   });
 
   return new ReadableStream<Uint8Array>({
