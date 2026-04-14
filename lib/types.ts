@@ -84,8 +84,9 @@ export interface SessionPipelineState {
   stage: PipelineStage;
   /** Display title for the learning record */
   name?: string;
-  fileA?: { name: string; size: number };
-  fileB?: { name: string; size: number };
+  /** sourceUrl: private Vercel Blob URL for originals (set at parse; used for download). */
+  fileA?: { name: string; size: number; sourceUrl?: string };
+  fileB?: { name: string; size: number; sourceUrl?: string };
   pairs?: ChunkPair[];
   analyses?: ChunkAnalysis[];
   globalPatterns?: GlobalPattern[];

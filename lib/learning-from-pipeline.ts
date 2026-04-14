@@ -18,8 +18,14 @@ export function learningSessionFromPipeline(
     name:
       state.name ??
       `${state.fileA?.name ?? 'File A'} vs ${state.fileB?.name ?? 'File B'}`,
-    fileA: state.fileA ?? { name: 'File A', size: 0 },
-    fileB: state.fileB ?? { name: 'File B', size: 0 },
+    fileA: {
+      name: state.fileA?.name ?? 'File A',
+      size: state.fileA?.size ?? 0,
+    },
+    fileB: {
+      name: state.fileB?.name ?? 'File B',
+      size: state.fileB?.size ?? 0,
+    },
     chunkCount: state.pairs.length,
     pairs: state.pairs,
     analyses: state.analyses,

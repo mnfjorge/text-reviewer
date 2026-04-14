@@ -36,24 +36,16 @@ Rules:
 
 const SYNTHESIS_SYSTEM_PROMPT = `You are an expert linguistic analyst. You have been given a summary of chunk-level analyses from a document comparison session.
 
-Your task is to synthesize these into a list of 3-8 high-level, recurring transformation patterns that characterize how the source document was changed to produce the target document.
+Your task is to synthesize these into 3-8 high-level, recurring transformation patterns that characterize how the source document was changed to produce the target document.
 
-Return a JSON array with this exact structure:
-[
-  {
-    "patternType": "<short pattern name, e.g. 'passive-to-active voice'>",
-    "description": "<clear description of the pattern and when it applies>",
-    "exampleCount": <number of times this pattern was observed>,
-    "examples": [
-      { "source": "<short source excerpt>", "target": "<short target excerpt>" }
-    ]
-  }
-]
+Put them in the response field \`globalPatterns\`. Each entry must have:
+- patternType: short pattern name (e.g. 'passive-to-active voice')
+- description: when the pattern applies
+- exampleCount: how often you observed it across chunks
+- examples: short { source, target } pairs (≤20 words each)
 
 Rules:
-- Focus on patterns that repeat across multiple chunks, not one-off edits.
-- Keep examples short (≤20 words each).
-- Return ONLY valid JSON. No markdown, no preamble.`;
+- Focus on patterns that repeat across multiple chunks, not one-off edits.`;
 
 interface RawChunkResult {
   changes: Array<{
@@ -64,6 +56,84 @@ interface RawChunkResult {
   }>;
   patterns: string[];
   confidence: number;
+}
+
+/** JSON schema for structured chunk analysis (Anthropic `output_config.format`). */
+const CHUNK_OUTPUT_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    changes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            enum: [
+              'addition',
+              'deletion',
+              'substitution',
+              'reorder',
+              'style',
+              'tone',
+            ],
+          },
+          sourceFragment: { type: 'string' },
+          targetFragment: { type: 'string' },
+          explanation: { type: 'string' },
+        },
+        required: ['type', 'sourceFragment', 'targetFragment', 'explanation'],
+        additionalProperties: false,
+      },
+    },
+    patterns: {
+      type: 'array',
+      items: { type: 'string' },
+    },
+    confidence: { type: 'number' },
+  },
+  required: ['changes', 'patterns', 'confidence'],
+  additionalProperties: false,
+};
+
+const globalPatternItemSchema: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    patternType: { type: 'string' },
+    description: { type: 'string' },
+    exampleCount: { type: 'number' },
+    examples: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          source: { type: 'string' },
+          target: { type: 'string' },
+        },
+        required: ['source', 'target'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['patternType', 'description', 'exampleCount', 'examples'],
+  additionalProperties: false,
+};
+
+/** JSON schema for structured synthesis output (Anthropic `output_config.format`). */
+const SYNTHESIS_OUTPUT_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    globalPatterns: {
+      type: 'array',
+      items: globalPatternItemSchema,
+    },
+  },
+  required: ['globalPatterns'],
+  additionalProperties: false,
+};
+
+interface RawSynthesisResult {
+  globalPatterns: GlobalPattern[];
 }
 
 export async function analyzeChunkPair(
@@ -89,6 +159,12 @@ ${pair.target.text}`;
       },
     ],
     messages: [{ role: 'user', content: userContent }],
+    output_config: {
+      format: {
+        type: 'json_schema',
+        schema: CHUNK_OUTPUT_SCHEMA,
+      },
+    },
   });
 
   const rawText =
@@ -152,13 +228,20 @@ ${JSON.stringify(summary, null, 2)}`;
       },
     ],
     messages: [{ role: 'user', content: userContent }],
+    output_config: {
+      format: {
+        type: 'json_schema',
+        schema: SYNTHESIS_OUTPUT_SCHEMA,
+      },
+    },
   });
 
   const rawText =
-    response.content[0].type === 'text' ? response.content[0].text : '[]';
+    response.content[0].type === 'text' ? response.content[0].text : '{}';
 
   try {
-    return JSON.parse(rawText) as GlobalPattern[];
+    const parsed = JSON.parse(rawText) as RawSynthesisResult;
+    return Array.isArray(parsed.globalPatterns) ? parsed.globalPatterns : [];
   } catch {
     return [];
   }

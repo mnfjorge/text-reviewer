@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { del, get } from '@vercel/blob';
+import { get } from '@vercel/blob';
 import { parseFile, isSupportedFile } from '@/lib/parsers';
-import { chunkText, alignChunkPairs } from '@/lib/chunker';
+import { buildChunkPairsForParse } from '@/lib/outline-align';
 import { getSessionPipelineState, putSessionPipelineState } from '@/lib/blob';
 import type { ParseResponse } from '@/lib/types';
 
@@ -68,9 +68,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       parseFile(bufB, '', fileB.name),
     ]);
 
-    const chunksA = chunkText(textA);
-    const chunksB = chunkText(textB);
-    const pairs = alignChunkPairs(chunksA, chunksB);
+    const pairs = await buildChunkPairsForParse(textA, textB);
+    const chunkCount = pairs.length;
 
     const prev = await getSessionPipelineState(sessionId);
     const createdAt = prev?.createdAt ?? new Date().toISOString();
@@ -80,22 +79,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       updatedAt: new Date().toISOString(),
       createdAt,
       stage: 'parsed',
-      fileA: { name: fileA.name, size: fileA.size },
-      fileB: { name: fileB.name, size: fileB.size },
+      fileA: { name: fileA.name, size: fileA.size, sourceUrl: fileA.url },
+      fileB: { name: fileB.name, size: fileB.size, sourceUrl: fileB.url },
       pairs,
     });
 
     const response: ParseResponse = {
       sessionId,
-      fileA: { name: fileA.name, size: fileA.size, chunkCount: chunksA.length },
-      fileB: { name: fileB.name, size: fileB.size, chunkCount: chunksB.length },
+      fileA: { name: fileA.name, size: fileA.size, chunkCount },
+      fileB: { name: fileB.name, size: fileB.size, chunkCount },
       pairs,
     };
-
-    // Clean up temp blobs in the background — don't await so we don't delay the response
-    Promise.all([del(fileA.url), del(fileB.url)]).catch(() => {
-      // Best-effort cleanup; non-fatal
-    });
 
     return NextResponse.json(response);
   } catch (err) {

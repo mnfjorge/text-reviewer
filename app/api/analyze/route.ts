@@ -56,6 +56,15 @@ export async function POST(request: NextRequest): Promise<Response> {
         const pipeline = await getSessionPipelineState(sessionId);
         const createdAt = pipeline?.createdAt ?? new Date().toISOString();
 
+        const fileAMerged = {
+          ...(pipeline?.fileA ?? { name: 'File A', size: 0 }),
+          ...(fileA ?? {}),
+        };
+        const fileBMerged = {
+          ...(pipeline?.fileB ?? { name: 'File B', size: 0 }),
+          ...(fileB ?? {}),
+        };
+
         const baseState: SessionPipelineState = {
           sessionId,
           updatedAt: new Date().toISOString(),
@@ -64,9 +73,9 @@ export async function POST(request: NextRequest): Promise<Response> {
           name:
             name ??
             pipeline?.name ??
-            `${fileA?.name ?? 'File A'} vs ${fileB?.name ?? 'File B'}`,
-          fileA: fileA ?? pipeline?.fileA ?? { name: 'File A', size: 0 },
-          fileB: fileB ?? pipeline?.fileB ?? { name: 'File B', size: 0 },
+            `${fileAMerged.name} vs ${fileBMerged.name}`,
+          fileA: fileAMerged,
+          fileB: fileBMerged,
           pairs,
           analyses,
         };
@@ -90,8 +99,8 @@ export async function POST(request: NextRequest): Promise<Response> {
         }
 
         const globalPatterns = await synthesizePatterns(analyses, {
-          a: fileA?.name ?? 'File A',
-          b: fileB?.name ?? 'File B',
+          a: fileAMerged.name,
+          b: fileBMerged.name,
         });
         send({ type: 'synthesis', globalPatterns });
 

@@ -55,6 +55,29 @@ function safeBlobSegment(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 180);
 }
 
+function SessionSourceDownloadLink({
+  sessionId,
+  side,
+  file,
+}: {
+  sessionId: string;
+  side: 'a' | 'b';
+  file: { name: string; sourceUrl?: string };
+}) {
+  if (!file.sourceUrl) {
+    return <span className="font-medium">{file.name}</span>;
+  }
+  return (
+    <a
+      href={`/api/session/${sessionId}/file?side=${side}`}
+      className="font-medium text-indigo-700 underline decoration-indigo-400/70 underline-offset-2 hover:text-indigo-900"
+      download={file.name}
+    >
+      {file.name}
+    </a>
+  );
+}
+
 function DropZone({
   label,
   file,
@@ -309,6 +332,9 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
           });
         }
 
+        // Session snapshot is applied; show UI before any long-running resume analyze.
+        setPipelineHydrated(true);
+
         const pairsLen = data.pairs?.length ?? 0;
         const done = data.analyses?.length ?? 0;
         if (
@@ -480,7 +506,18 @@ export function FileUploader({ sessionId }: { sessionId: string }) {
         <div className="mb-4 rounded-lg border border-indigo-100 bg-indigo-50/80 px-4 py-3 text-sm text-indigo-900">
           <p className="font-medium">Restored from this session</p>
           <p className="mt-1 text-indigo-800/90">
-            {savedPipeline!.fileA!.name} · {savedPipeline!.fileB!.name} ·{' '}
+            <SessionSourceDownloadLink
+              sessionId={sessionId}
+              side="a"
+              file={savedPipeline!.fileA!}
+            />
+            {' · '}
+            <SessionSourceDownloadLink
+              sessionId={sessionId}
+              side="b"
+              file={savedPipeline!.fileB!}
+            />
+            {' · '}
             {savedPipeline!.pairs!.length} aligned chunk pairs
           </p>
           <p className="mt-2 text-xs text-indigo-700/80">
