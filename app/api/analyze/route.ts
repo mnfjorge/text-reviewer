@@ -1,12 +1,17 @@
 import { NextRequest } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
 import { analyzeChunkPair, synthesizePatterns } from '@/lib/claude';
-import { saveLearningSession } from '@/lib/blob';
+import {
+  getSessionPipelineState,
+  putSessionPipelineState,
+  saveLearningSession,
+} from '@/lib/blob';
+import { learningSessionFromPipeline } from '@/lib/learning-from-pipeline';
 import type {
   AnalyzeRequest,
   AnalyzeStreamEvent,
   ChunkAnalysis,
   LearningSession,
+  SessionPipelineState,
 } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -24,7 +29,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     return new Response('Invalid JSON body', { status: 400 });
   }
 
-  const { sessionId, pairs, fileA, fileB, name } = body;
+  const { sessionId, pairs, fileA, fileB, name, existingAnalyses } = body;
 
   if (!sessionId || !pairs || pairs.length === 0) {
     return new Response('sessionId and pairs are required', { status: 400 });
@@ -38,15 +43,48 @@ export async function POST(request: NextRequest): Promise<Response> {
         controller.enqueue(encoder.encode(sseEvent(event)));
       };
 
-      try {
-        const analyses: ChunkAnalysis[] = [];
+      const existing = existingAnalyses ?? [];
+      if (existing.length > pairs.length) {
+        send({ type: 'error', message: 'existingAnalyses longer than pairs' });
+        controller.close();
+        return;
+      }
 
-        for (let i = 0; i < pairs.length; i++) {
+      const analyses: ChunkAnalysis[] = [...existing];
+
+      try {
+        const pipeline = await getSessionPipelineState(sessionId);
+        const createdAt = pipeline?.createdAt ?? new Date().toISOString();
+
+        const baseState: SessionPipelineState = {
+          sessionId,
+          updatedAt: new Date().toISOString(),
+          createdAt,
+          stage: 'analyzing',
+          name:
+            name ??
+            pipeline?.name ??
+            `${fileA?.name ?? 'File A'} vs ${fileB?.name ?? 'File B'}`,
+          fileA: fileA ?? pipeline?.fileA ?? { name: 'File A', size: 0 },
+          fileB: fileB ?? pipeline?.fileB ?? { name: 'File B', size: 0 },
+          pairs,
+          analyses,
+        };
+
+        await putSessionPipelineState(baseState);
+
+        for (let i = existing.length; i < pairs.length; i++) {
           const pair = pairs[i];
           send({ type: 'chunk_start', chunkIndex: i, total: pairs.length });
 
           const analysis = await analyzeChunkPair(pair, pairs.length);
           analyses.push(analysis);
+
+          await putSessionPipelineState({
+            ...baseState,
+            updatedAt: new Date().toISOString(),
+            analyses: [...analyses],
+          });
 
           send({ type: 'chunk_complete', chunkIndex: i, analysis });
         }
@@ -57,22 +95,45 @@ export async function POST(request: NextRequest): Promise<Response> {
         });
         send({ type: 'synthesis', globalPatterns });
 
-        const learningId = uuidv4();
-        const session: LearningSession = {
-          id: learningId,
-          createdAt: new Date().toISOString(),
-          name: name ?? `${fileA?.name ?? 'File A'} vs ${fileB?.name ?? 'File B'}`,
-          fileA: fileA ?? { name: 'File A', size: 0 },
-          fileB: fileB ?? { name: 'File B', size: 0 },
-          chunkCount: pairs.length,
-          pairs,
+        await putSessionPipelineState({
+          ...baseState,
+          updatedAt: new Date().toISOString(),
+          stage: 'synthesized',
           analyses,
           globalPatterns,
+        });
+
+        const sessionPayload: SessionPipelineState = {
+          ...baseState,
+          updatedAt: new Date().toISOString(),
+          stage: 'synthesized',
+          analyses,
+          globalPatterns,
+          createdAt,
+        };
+
+        const built = learningSessionFromPipeline(sessionPayload, '');
+        if (!built) {
+          send({ type: 'error', message: 'Failed to build learning session' });
+          return;
+        }
+
+        const session: LearningSession = {
+          ...built,
+          createdAt,
           blobUrl: '',
         };
 
         const blobUrl = await saveLearningSession(session);
-        send({ type: 'saved', learningId, blobUrl });
+
+        await putSessionPipelineState({
+          ...sessionPayload,
+          stage: 'completed',
+          learningBlobUrl: blobUrl,
+          updatedAt: new Date().toISOString(),
+        });
+
+        send({ type: 'saved', learningId: sessionId, blobUrl });
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'Analysis failed';

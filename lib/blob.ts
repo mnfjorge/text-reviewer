@@ -1,7 +1,38 @@
-import { put, head, del, list } from '@vercel/blob';
-import type { LearningMeta, LearningSession } from './types';
+import { del, get, put } from '@vercel/blob';
+import type { LearningMeta, LearningSession, SessionPipelineState } from './types';
 
 const INDEX_PATH = 'learnings/index.json';
+
+const sessionStatePath = (id: string) => `sessions/${id}/state.json`;
+
+/** Private blobs must be read via the SDK — plain `fetch(url)` is not authorized. */
+async function readJsonBlob<T>(pathname: string): Promise<T | null> {
+  try {
+    const result = await get(pathname, { access: 'private' });
+    if (!result || result.statusCode !== 200 || !result.stream) return null;
+    const text = await new Response(result.stream).text();
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function getSessionPipelineState(
+  id: string,
+): Promise<SessionPipelineState | null> {
+  return readJsonBlob<SessionPipelineState>(sessionStatePath(id));
+}
+
+export async function putSessionPipelineState(
+  state: SessionPipelineState,
+): Promise<void> {
+  const path = sessionStatePath(state.sessionId);
+  await put(path, JSON.stringify(state), {
+    access: 'private',
+    contentType: 'application/json',
+    allowOverwrite: true,
+  });
+}
 
 export async function saveLearningSession(
   session: LearningSession,
@@ -9,9 +40,9 @@ export async function saveLearningSession(
   const sessionPath = `learnings/${session.id}/session.json`;
 
   const { url } = await put(sessionPath, JSON.stringify(session), {
-    access: 'public',
+    access: 'private',
     contentType: 'application/json',
-    allowOverwrite: false,
+    allowOverwrite: true,
   });
 
   const meta: LearningMeta = {
@@ -24,7 +55,10 @@ export async function saveLearningSession(
     blobUrl: url,
   };
 
-  await updateIndex((current) => [...current, meta]);
+  await updateIndex((current) => {
+    const without = current.filter((m) => m.id !== meta.id);
+    return [...without, meta];
+  });
   return url;
 }
 
@@ -32,39 +66,18 @@ export async function getLearningSession(
   id: string,
 ): Promise<LearningSession | null> {
   const sessionPath = `learnings/${id}/session.json`;
-  try {
-    // Check if the blob exists first
-    const blobs = await list({ prefix: sessionPath });
-    if (blobs.blobs.length === 0) return null;
-
-    const blobUrl = blobs.blobs[0].url;
-    const res = await fetch(blobUrl);
-    if (!res.ok) return null;
-    return (await res.json()) as LearningSession;
-  } catch {
-    return null;
-  }
+  return readJsonBlob<LearningSession>(sessionPath);
 }
 
 export async function listLearningSessions(): Promise<LearningMeta[]> {
-  try {
-    const blobs = await list({ prefix: INDEX_PATH });
-    if (blobs.blobs.length === 0) return [];
-    const res = await fetch(blobs.blobs[0].url);
-    if (!res.ok) return [];
-    return (await res.json()) as LearningMeta[];
-  } catch {
-    return [];
-  }
+  const data = await readJsonBlob<LearningMeta[]>(INDEX_PATH);
+  return data ?? [];
 }
 
 export async function deleteLearningSession(id: string): Promise<void> {
   const sessionPath = `learnings/${id}/session.json`;
   try {
-    const blobs = await list({ prefix: sessionPath });
-    if (blobs.blobs.length > 0) {
-      await del(blobs.blobs[0].url);
-    }
+    await del(sessionPath);
   } catch {
     // Ignore if blob not found
   }
@@ -77,7 +90,7 @@ async function updateIndex(
   const current = await listLearningSessions();
   const updated = updater(current);
   await put(INDEX_PATH, JSON.stringify(updated), {
-    access: 'public',
+    access: 'private',
     contentType: 'application/json',
     allowOverwrite: true,
   });

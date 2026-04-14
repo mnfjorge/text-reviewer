@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
-import { del } from '@vercel/blob';
+import { del, get } from '@vercel/blob';
 import { parseFile, isSupportedFile } from '@/lib/parsers';
 import { chunkText, alignChunkPairs } from '@/lib/chunker';
+import { getSessionPipelineState, putSessionPipelineState } from '@/lib/blob';
 import type { ParseResponse } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -11,14 +11,17 @@ export const maxDuration = 120;
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
 
 interface ParseRequestBody {
+  sessionId: string;
   fileA: { url: string; name: string; size: number };
   fileB: { url: string; name: string; size: number };
 }
 
 async function fetchBlob(url: string): Promise<Buffer> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch uploaded file: ${res.statusText}`);
-  return Buffer.from(await res.arrayBuffer());
+  const result = await get(url, { access: 'private' });
+  if (!result || result.statusCode !== 200 || !result.stream) {
+    throw new Error('Failed to fetch uploaded file');
+  }
+  return Buffer.from(await new Response(result.stream).arrayBuffer());
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -29,7 +32,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { fileA, fileB } = body;
+  const { sessionId, fileA, fileB } = body;
+
+  if (!sessionId?.trim()) {
+    return NextResponse.json({ error: 'sessionId is required' }, { status: 400 });
+  }
 
   if (!fileA?.url || !fileB?.url) {
     return NextResponse.json({ error: 'Both fileA and fileB are required' }, { status: 400 });
@@ -65,7 +72,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const chunksB = chunkText(textB);
     const pairs = alignChunkPairs(chunksA, chunksB);
 
-    const sessionId = uuidv4();
+    const prev = await getSessionPipelineState(sessionId);
+    const createdAt = prev?.createdAt ?? new Date().toISOString();
+
+    await putSessionPipelineState({
+      sessionId,
+      updatedAt: new Date().toISOString(),
+      createdAt,
+      stage: 'parsed',
+      fileA: { name: fileA.name, size: fileA.size },
+      fileB: { name: fileB.name, size: fileB.size },
+      pairs,
+    });
 
     const response: ParseResponse = {
       sessionId,

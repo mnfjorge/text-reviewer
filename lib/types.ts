@@ -70,12 +70,37 @@ export interface ParseResponse {
   pairs: ChunkPair[];
 }
 
+/** Persisted workspace pipeline (URL session id = primary key). */
+export type PipelineStage =
+  | 'empty'
+  | 'parsed'
+  | 'analyzing'
+  | 'synthesized'
+  | 'completed';
+
+export interface SessionPipelineState {
+  sessionId: string;
+  updatedAt: string;
+  stage: PipelineStage;
+  /** Display title for the learning record */
+  name?: string;
+  fileA?: { name: string; size: number };
+  fileB?: { name: string; size: number };
+  pairs?: ChunkPair[];
+  analyses?: ChunkAnalysis[];
+  globalPatterns?: GlobalPattern[];
+  learningBlobUrl?: string;
+  createdAt?: string;
+}
+
 export interface AnalyzeRequest {
   sessionId: string;
   pairs: ChunkPair[];
   fileA: { name: string; size: number };
   fileB: { name: string; size: number };
   name?: string;
+  /** When resuming after reload, pass completed chunk analyses in order. */
+  existingAnalyses?: ChunkAnalysis[];
 }
 
 // ---- SSE Events ----
